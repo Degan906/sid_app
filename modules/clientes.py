@@ -8,7 +8,7 @@ import re
 # === CONFIG JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
 JIRA_API = f"{JIRA_URL}/rest/api/2"
-PROJECT_KEY = "MECANICA"
+PROJECT_KEY = "MC"
 ISSUE_TYPE = "Clientes"
 AUTH = HTTPBasicAuth("degan906@gmail.com", "glUQTNZG0V1uYnrRjp9yBB17")
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
