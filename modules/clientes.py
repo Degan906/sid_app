@@ -56,7 +56,7 @@ def buscar_cep(cep):
     return None
 
 def tela_clientes():
-    st.header("👤 Cadastro de Clientes")
+    st.header("👤 Cadastro de Clientes V1")
     inicializar_csv()
     df_clientes = listar_clientes()
 
