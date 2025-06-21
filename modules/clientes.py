@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import re
 
 CAMINHO_CSV = "data/clientes.csv"
 
@@ -10,6 +11,11 @@ def inicializar_csv():
     if not os.path.exists(CAMINHO_CSV):
         df = pd.DataFrame(columns=["id_cliente", "nome", "cpf_cnpj", "telefone", "email", "endereco"])
         df.to_csv(CAMINHO_CSV, index=False)
+
+# Função para aplicar padrão ABNT em nomes (capitalização)
+def corrigir_nome_abnt(nome):
+    nome = nome.strip().lower()
+    return re.sub(r"\b(\w)", lambda m: m.group(1).upper(), nome)
 
 def gerar_id():
     df = pd.read_csv(CAMINHO_CSV)
@@ -41,16 +47,17 @@ def tela_clientes():
             if not nome or not cpf_cnpj:
                 st.warning("Nome e CPF/CNPJ são obrigatórios.")
             else:
+                nome_corrigido = corrigir_nome_abnt(nome)
                 cliente = {
                     "id_cliente": gerar_id(),
-                    "nome": nome,
+                    "nome": nome_corrigido,
                     "cpf_cnpj": cpf_cnpj,
                     "telefone": telefone,
                     "email": email,
                     "endereco": endereco,
                 }
                 salvar_cliente(cliente)
-                st.success("Cliente salvo com sucesso!")
+                st.success(f"Cliente '{nome_corrigido}' salvo com sucesso!")
 
     st.subheader("📋 Clientes cadastrados")
     df_clientes = listar_clientes()
