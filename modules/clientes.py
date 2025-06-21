@@ -15,6 +15,12 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
+# === VARIÁVEIS DE CONTROLE ===
+if "resumo_confirmado" not in st.session_state:
+    st.session_state.resumo_confirmado = False
+if "dados_confirmados" not in st.session_state:
+    st.session_state.dados_confirmados = {}
+
 # === FUNÇÕES AUXILIARES ===
 def corrige_abnt(texto):
     texto = texto.strip().lower()
@@ -83,10 +89,9 @@ def tela_clientes():
         numero = st.text_input("Nº")
         complemento = st.text_input("Complemento")
         imagem = st.file_uploader("Foto do cliente:", type=["png", "jpg", "jpeg"])
+        confirmar = st.form_submit_button("✅ Confirmar Dados")
 
-        submit = st.form_submit_button("✅ Confirmar e Enviar para o Jira")
-
-    if submit:
+    if confirmar:
         nome_abnt = corrige_abnt(nome)
         empresa_abnt = corrige_abnt(empresa)
         endereco_obj = buscar_endereco(cep)
@@ -96,22 +101,50 @@ def tela_clientes():
         else:
             endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
 
-        st.markdown("""
-        ### 📄 Resumo do cadastro gerado
-        **Nome:** {0}  
-        **CPF/CNPJ:** {1}  
-        **Empresa:** {2}  
-        **Telefone:** {3}  
-        **E-mail:** {4}  
-        **Endereço:** {5}  
-        """.format(nome_abnt, cpf, empresa_abnt, telefone, email, endereco_formatado))
+        st.session_state.resumo_confirmado = True
+        st.session_state.dados_confirmados = {
+            "nome": nome_abnt,
+            "cpf": cpf,
+            "empresa": empresa_abnt,
+            "telefone": telefone,
+            "email": email,
+            "cep": cep,
+            "numero": numero,
+            "complemento": complemento,
+            "endereco_formatado": endereco_formatado,
+            "imagem": imagem
+        }
 
-        if imagem:
-            st.image(imagem, width=160, caption="Foto selecionada")
+        st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
-        with st.spinner("Enviando para o Jira..."):
-            issue_key = criar_issue_jira(nome_abnt, cpf, empresa_abnt, telefone, email, cep, numero, complemento, endereco_formatado)
-            if issue_key:
-                if imagem:
-                    anexar_foto(issue_key, imagem)
-                st.success(f"✅ Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
+    # Mostrar o resumo e botão de envio só se tiver confirmação
+    if st.session_state.resumo_confirmado:
+        dados = st.session_state.dados_confirmados
+        st.markdown(f"""
+        ### 📄 Resumo do cadastro
+        **Nome:** {dados['nome']}  
+        **CPF/CNPJ:** {dados['cpf']}  
+        **Empresa:** {dados['empresa']}  
+        **Telefone:** {dados['telefone']}  
+        **E-mail:** {dados['email']}  
+        **Endereço:** {dados['endereco_formatado']}  
+        """)
+
+        if dados["imagem"]:
+            st.image(dados["imagem"], width=160, caption="Foto selecionada")
+
+        if st.button("🚀 Enviar para o Jira"):
+            with st.spinner("Enviando para o Jira..."):
+                issue_key = criar_issue_jira(
+                    dados["nome"], dados["cpf"], dados["empresa"],
+                    dados["telefone"], dados["email"], dados["cep"],
+                    dados["numero"], dados["complemento"], dados["endereco_formatado"]
+                )
+                if issue_key:
+                    if dados["imagem"]:
+                        anexar_foto(issue_key, dados["imagem"])
+                    st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
+                    # Resetar para novo cadastro
+                    st.session_state.resumo_confirmado = False
+                    st.session_state.dados_confirmados = {}
+
