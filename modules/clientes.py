@@ -1,141 +1,121 @@
 # sid_app/modules/clientes.py
 import streamlit as st
 import pandas as pd
-import os
-import re
 import requests
+from requests.auth import HTTPBasicAuth
+import re
 
-CAMINHO_CSV = "data/clientes.csv"
-CAMINHO_FOTOS = "data/fotos/clientes/"
-os.makedirs(CAMINHO_FOTOS, exist_ok=True)
+# === CONFIG JIRA ===
+JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_API = f"{JIRA_URL}/rest/api/2"
+PROJECT_KEY = "MECANICA"
+ISSUE_TYPE = "Clientes"
+AUTH = HTTPBasicAuth("degan906@gmail.com", "glUQTNZG0V1uYnrRjp9yBB17")
+HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
-# Cria o arquivo se não existir
-def inicializar_csv():
-    if not os.path.exists(CAMINHO_CSV):
-        df = pd.DataFrame(columns=[
-            "id_cliente", "nome", "cpf_cnpj", "telefone", "email",
-            "cep", "endereco", "numero", "complemento", "ativo", "foto"
-        ])
-        df.to_csv(CAMINHO_CSV, index=False)
+# === CAMPOS CUSTOMIZADOS ===
+CAMPOS = {
+    "nome": "customfield_10038",
+    "cpf_cnpj": "customfield_10040",
+    "empresa": "customfield_10051",
+    "contato": "customfield_10041",
+    "email": "customfield_10042",
+    "cep": "customfield_10133",
+    "complemento": "customfield_10044",
+    "numero": "customfield_10139"
+}
 
-# Corrige nome para padrão ABNT
+# === FUNÇÕES ===
 def corrigir_nome_abnt(nome):
     nome = nome.strip().lower()
     return re.sub(r"\b(\w)", lambda m: m.group(1).upper(), nome)
 
-def gerar_id():
-    df = pd.read_csv(CAMINHO_CSV)
-    if df.empty:
-        return 1
-    return int(df["id_cliente"].max()) + 1
+def criar_cliente(data, foto=None):
+    payload = {
+        "fields": {
+            "project": {"key": PROJECT_KEY},
+            "summary": data["nome"],
+            "issuetype": {"name": ISSUE_TYPE},
+            CAMPOS["nome"]: data["nome"],
+            CAMPOS["cpf_cnpj"]: data["cpf_cnpj"],
+            CAMPOS["empresa"]: data["empresa"],
+            CAMPOS["contato"]: data["contato"],
+            CAMPOS["email"]: data["email"],
+            CAMPOS["cep"]: data["cep"],
+            CAMPOS["complemento"]: data["complemento"],
+            CAMPOS["numero"]: data["numero"]
+        }
+    }
+    res = requests.post(f"{JIRA_API}/issue", json=payload, headers=HEADERS, auth=AUTH)
+    if res.status_code == 201:
+        key = res.json()["key"]
+        if foto:
+            files = {"file": (foto.name, foto.read(), foto.type)}
+            headers = {"X-Atlassian-Token": "no-check"}
+            upload_url = f"{JIRA_API}/issue/{key}/attachments"
+            requests.post(upload_url, files=files, headers=headers, auth=AUTH)
+        return True, key
+    return False, res.text
 
-def salvar_cliente(cliente):
-    df = pd.read_csv(CAMINHO_CSV)
-    df = pd.concat([df, pd.DataFrame([cliente])], ignore_index=True)
-    df.to_csv(CAMINHO_CSV, index=False)
-
-def atualizar_cliente(linha, novos_dados):
-    df = pd.read_csv(CAMINHO_CSV)
-    for key in novos_dados:
-        df.at[linha, key] = novos_dados[key]
-    df.to_csv(CAMINHO_CSV, index=False)
-
-def listar_clientes():
-    return pd.read_csv(CAMINHO_CSV)
-
-def buscar_cep(cep):
-    try:
-        response = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
-        if response.status_code == 200:
-            data = response.json()
-            if "erro" in data:
-                return None
-            return f"{data['logradouro']} - {data['bairro']} - {data['localidade']}/{data['uf']}"
-    except:
-        return None
-    return None
+def buscar_clientes():
+    jql = f'project = {PROJECT_KEY} AND issuetype = "{ISSUE_TYPE}" ORDER BY created DESC'
+    res = requests.get(f"{JIRA_API}/search?jql={jql}&maxResults=100", headers=HEADERS, auth=AUTH)
+    if res.status_code == 200:
+        issues = res.json()["issues"]
+        lista = []
+        for issue in issues:
+            f = issue["fields"]
+            lista.append({
+                "Key": issue["key"],
+                "Nome": f.get(CAMPOS["nome"], ""),
+                "CPF/CNPJ": f.get(CAMPOS["cpf_cnpj"], ""),
+                "Contato": f.get(CAMPOS["contato"], ""),
+                "E-mail": f.get(CAMPOS["email"], ""),
+                "Empresa": f.get(CAMPOS["empresa"], ""),
+                "CEP": f.get(CAMPOS["cep"], ""),
+                "Número": f.get(CAMPOS["numero"], ""),
+                "Complemento": f.get(CAMPOS["complemento"], "")
+            })
+        return lista
+    return []
 
 def tela_clientes():
-    st.header("👤 Cadastro de Clientes")
-    inicializar_csv()
-    df_clientes = listar_clientes()
+    st.header("👤 Cadastro de Clientes (Jira)")
 
     with st.expander("➕ Novo Cliente"):
-        cep = st.text_input("CEP")
-        if st.button("🔍 Buscar Endereço"):
-            endereco = buscar_cep(cep) or "CEP inválido ou não encontrado"
-            st.session_state.endereco_busca = endereco
-
         with st.form("form_cliente"):
             nome = st.text_input("Nome completo")
-            cpf_cnpj = st.text_input("CPF ou CNPJ")
-            telefone = st.text_input("Telefone")
+            cpf = st.text_input("CPF/CNPJ")
+            empresa = st.text_input("Empresa")
+            contato = st.text_input("Telefone")
             email = st.text_input("E-mail")
-            endereco_final = st.text_input("Endereço", value=st.session_state.get("endereco_busca", ""))
+            cep = st.text_input("CEP")
             numero = st.text_input("Número")
             complemento = st.text_input("Complemento")
-            ativo = st.selectbox("Status", ["Ativo", "Inativo"])
-            foto = st.file_uploader("Foto do cliente", type=["jpg", "jpeg", "png"])
-            submitted = st.form_submit_button("Salvar cliente")
+            foto = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
+            submitted = st.form_submit_button("Salvar")
 
-            if submitted:
-                if not nome or not cpf_cnpj:
-                    st.warning("Nome e CPF/CNPJ são obrigatórios.")
-                else:
-                    nome_corrigido = corrigir_nome_abnt(nome)
-                    novo_id = gerar_id()
-                    caminho_foto = ""
-                    if foto:
-                        ext = os.path.splitext(foto.name)[-1]
-                        caminho_foto = f"{CAMINHO_FOTOS}cliente_{novo_id}{ext}"
-                        with open(caminho_foto, "wb") as f:
-                            f.write(foto.read())
-                    cliente = {
-                        "id_cliente": novo_id,
-                        "nome": nome_corrigido,
-                        "cpf_cnpj": cpf_cnpj,
-                        "telefone": telefone,
-                        "email": email,
-                        "cep": cep,
-                        "endereco": endereco_final,
-                        "numero": numero,
-                        "complemento": complemento,
-                        "ativo": ativo,
-                        "foto": caminho_foto
-                    }
-                    salvar_cliente(cliente)
-                    st.success(f"Cliente '{nome_corrigido}' salvo com sucesso!")
+        if submitted:
+            nome = corrigir_nome_abnt(nome)
+            cliente = {
+                "nome": nome,
+                "cpf_cnpj": cpf,
+                "empresa": empresa,
+                "contato": contato,
+                "email": email,
+                "cep": cep,
+                "numero": numero,
+                "complemento": complemento
+            }
+            ok, msg = criar_cliente(cliente, foto)
+            if ok:
+                st.success(f"Cliente '{nome}' criado com sucesso (issue {msg})")
+            else:
+                st.error(f"Erro ao criar cliente: {msg}")
 
     st.subheader("📋 Clientes cadastrados")
-    if not df_clientes.empty:
-        for i, row in df_clientes.iterrows():
-            with st.expander(f"{row['nome']} ({'✅' if row['ativo']=='Ativo' else '❌'})"):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    with st.form(f"edit_{row['id_cliente']}"):
-                        nome_edit = st.text_input("Nome", value=row["nome"])
-                        telefone_edit = st.text_input("Telefone", value=row["telefone"])
-                        email_edit = st.text_input("Email", value=row["email"])
-                        endereco_edit = st.text_input("Endereço", value=row["endereco"])
-                        numero_edit = st.text_input("Número", value=row["numero"])
-                        complemento_edit = st.text_input("Complemento", value=row["complemento"])
-                        ativo_edit = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if row["ativo"]=="Ativo" else 1)
-                        if st.form_submit_button("Salvar alterações"):
-                            novos_dados = {
-                                "nome": corrigir_nome_abnt(nome_edit),
-                                "telefone": telefone_edit,
-                                "email": email_edit,
-                                "endereco": endereco_edit,
-                                "numero": numero_edit,
-                                "complemento": complemento_edit,
-                                "ativo": ativo_edit
-                            }
-                            atualizar_cliente(i, novos_dados)
-                            st.success("Dados atualizados! Recarregue a página para ver as mudanças.")
-                with col2:
-                    if row["foto"] and os.path.exists(row["foto"]):
-                        st.image(row["foto"], caption="Foto", width=100)
-                    else:
-                        st.info("Sem foto")
+    data = buscar_clientes()
+    if data:
+        st.dataframe(pd.DataFrame(data))
     else:
-        st.info("Nenhum cliente cadastrado.")
+        st.info("Nenhum cliente encontrado.")
