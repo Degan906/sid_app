@@ -26,9 +26,23 @@ CAMPOS = {
 }
 
 # === FUNÇÕES ===
-def corrigir_nome_abnt(nome):
-    nome = nome.strip().lower()
-    return re.sub(r"\b(\w)", lambda m: m.group(1).upper(), nome)
+def corrigir_texto_abnt(texto):
+    if not texto:
+        return ""
+    texto = texto.strip().lower()
+    return re.sub(r"\b(\w)", lambda m: m.group(1).upper(), texto)
+
+def buscar_endereco_por_cep(cep):
+    try:
+        res = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        if res.status_code == 200:
+            data = res.json()
+            if "erro" in data:
+                return None
+            return f"{data['logradouro']} - {data['bairro']} - {data['localidade']}/{data['uf']}"
+    except:
+        return None
+    return None
 
 def criar_cliente(data, foto=None):
     payload = {
@@ -84,34 +98,52 @@ def tela_clientes():
 
     with st.expander("➕ Novo Cliente"):
         with st.form("form_cliente"):
-            nome = st.text_input("Nome completo")
+            nome_raw = st.text_input("Nome completo")
             cpf = st.text_input("CPF/CNPJ")
-            empresa = st.text_input("Empresa")
-            contato = st.text_input("Telefone")
-            email = st.text_input("E-mail")
+            empresa_raw = st.text_input("Empresa")
+            contato_raw = st.text_input("Telefone")
+            email_raw = st.text_input("E-mail")
             cep = st.text_input("CEP")
             numero = st.text_input("Número")
-            complemento = st.text_input("Complemento")
+            complemento_raw = st.text_input("Complemento")
             foto = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
-            submitted = st.form_submit_button("Salvar")
+            buscar = st.form_submit_button("🔍 Processar e revisar")
 
-        if submitted:
-            nome = corrigir_nome_abnt(nome)
-            cliente = {
-                "nome": nome,
-                "cpf_cnpj": cpf,
-                "empresa": empresa,
-                "contato": contato,
-                "email": email,
-                "cep": cep,
-                "numero": numero,
-                "complemento": complemento
-            }
-            ok, msg = criar_cliente(cliente, foto)
-            if ok:
-                st.success(f"Cliente '{nome}' criado com sucesso (issue {msg})")
-            else:
-                st.error(f"Erro ao criar cliente: {msg}")
+        if buscar:
+            nome = corrigir_texto_abnt(nome_raw)
+            empresa = corrigir_texto_abnt(empresa_raw)
+            contato = corrigir_texto_abnt(contato_raw)
+            email = corrigir_texto_abnt(email_raw)
+            complemento = corrigir_texto_abnt(complemento_raw)
+            endereco_formatado = buscar_endereco_por_cep(cep) or "CEP inválido ou não encontrado"
+
+            with st.expander("📋 Resumo do cadastro gerado", expanded=True):
+                st.markdown(f"**Nome:** {nome}")
+                st.markdown(f"**CPF/CNPJ:** {cpf}")
+                st.markdown(f"**Empresa:** {empresa}")
+                st.markdown(f"**Telefone:** {contato}")
+                st.markdown(f"**E-mail:** {email}")
+                st.markdown(f"**Endereço:** {endereco_formatado}, nº {numero}, {complemento}")
+                if foto:
+                    st.image(foto, caption="Foto selecionada", width=150)
+                confirmar = st.button("✅ Confirmar cadastro")
+
+            if confirmar:
+                cliente = {
+                    "nome": nome,
+                    "cpf_cnpj": cpf,
+                    "empresa": empresa,
+                    "contato": contato,
+                    "email": email,
+                    "cep": cep,
+                    "numero": numero,
+                    "complemento": complemento
+                }
+                ok, msg = criar_cliente(cliente, foto)
+                if ok:
+                    st.success(f"Cliente '{nome}' criado com sucesso (issue {msg})")
+                else:
+                    st.error(f"Erro ao criar cliente: {msg}")
 
     st.subheader("📋 Clientes cadastrados")
     data = buscar_clientes()
