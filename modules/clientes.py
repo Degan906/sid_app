@@ -84,45 +84,34 @@ def tela_clientes():
         complemento = st.text_input("Complemento")
         imagem = st.file_uploader("Foto do cliente:", type=["png", "jpg", "jpeg"])
 
-        buscar = st.form_submit_button("🔍 Buscar Endereço")
+        submit = st.form_submit_button("✅ Confirmar e Enviar para o Jira")
 
-        endereco_formatado = ""
-        endereco_obj = None
+    if submit:
+        nome_abnt = corrige_abnt(nome)
+        empresa_abnt = corrige_abnt(empresa)
+        endereco_obj = buscar_endereco(cep)
 
-        if buscar and cep:
-            endereco_obj = buscar_endereco(cep)
-            if endereco_obj:
-                endereco_formatado = f"{endereco_obj['logradouro']} - {endereco_obj['bairro']} - {endereco_obj['localidade']}/{endereco_obj['uf']}, nº {numero}"
-                st.success(f"Endereço encontrado: {endereco_formatado}")
-            else:
-                st.error("CEP não encontrado")
+        if endereco_obj:
+            endereco_formatado = f"{endereco_obj['logradouro']} - {endereco_obj['bairro']} - {endereco_obj['localidade']}/{endereco_obj['uf']}, nº {numero}"
+        else:
+            endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
 
-        confirmar = st.form_submit_button("✅ Confirmar cadastro")
+        st.markdown("""
+        ### 📄 Resumo do cadastro gerado
+        **Nome:** {0}  
+        **CPF/CNPJ:** {1}  
+        **Empresa:** {2}  
+        **Telefone:** {3}  
+        **E-mail:** {4}  
+        **Endereço:** {5}  
+        """.format(nome_abnt, cpf, empresa_abnt, telefone, email, endereco_formatado))
 
-        if confirmar:
-            nome_abnt = corrige_abnt(nome)
-            empresa_abnt = corrige_abnt(empresa)
-            endereco_formatado = endereco_formatado or f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
+        if imagem:
+            st.image(imagem, width=160, caption="Foto selecionada")
 
-            st.markdown("""
-            ### 📄 Resumo do cadastro gerado
-            **Nome:** {0}  
-            **CPF/CNPJ:** {1}  
-            **Empresa:** {2}  
-            **Telefone:** {3}  
-            **E-mail:** {4}  
-            **Endereço:** {5}  
-            """.format(nome_abnt, cpf, empresa_abnt, telefone, email, endereco_formatado))
-
-            if imagem:
-                st.image(imagem, width=160, caption="Foto selecionada")
-
-            enviar = st.form_submit_button("🚀 Enviar para o Jira")
-
-            if enviar:
-                issue_key = criar_issue_jira(nome_abnt, cpf, empresa_abnt, telefone, email, cep, numero, complemento, endereco_formatado)
-                if issue_key and imagem:
+        with st.spinner("Enviando para o Jira..."):
+            issue_key = criar_issue_jira(nome_abnt, cpf, empresa_abnt, telefone, email, cep, numero, complemento, endereco_formatado)
+            if issue_key:
+                if imagem:
                     anexar_foto(issue_key, imagem)
-                if issue_key:
-                    st.success(f"Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-
+                st.success(f"✅ Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
