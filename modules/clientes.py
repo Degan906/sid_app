@@ -117,9 +117,12 @@ def tela_clientes():
             if imagem:
                 st.image(imagem, width=160, caption="Foto selecionada")
 
-            if st.button("🚀 Enviar para o Jira"):
+            enviar = st.form_submit_button("🚀 Enviar para o Jira")
+
+            if enviar:
                 issue_key = criar_issue_jira(nome_abnt, cpf, empresa_abnt, telefone, email, cep, numero, complemento, endereco_formatado)
                 if issue_key and imagem:
                     anexar_foto(issue_key, imagem)
                 if issue_key:
                     st.success(f"Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
+
