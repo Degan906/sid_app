@@ -15,12 +15,6 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === VARIÁVEIS DE CONTROLE ===
-if "resumo_confirmado" not in st.session_state:
-    st.session_state.resumo_confirmado = False
-if "dados_confirmados" not in st.session_state:
-    st.session_state.dados_confirmados = {}
-
 # === FUNÇÕES AUXILIARES ===
 def corrige_abnt(texto):
     texto = texto.strip().lower()
@@ -62,7 +56,7 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
     if response.status_code == 201:
         return response.json().get("key")
     else:
-        st.error(f"Erro ao criar cliente: {response.text}")
+        st.error(f"Erro ao criar cliente: {response.status_code} - {response.text}")
         return None
 
 def anexar_foto(issue_key, imagem):
@@ -78,6 +72,12 @@ def anexar_foto(issue_key, imagem):
 # === TELA DE CLIENTES ===
 def tela_clientes():
     st.header("👤 Cadastro de Clientes")
+
+    # Inicializar variáveis de sessão
+    if "resumo_confirmado" not in st.session_state:
+        st.session_state.resumo_confirmado = False
+    if "dados_confirmados" not in st.session_state:
+        st.session_state.dados_confirmados = {}
 
     with st.form("form_cliente"):
         nome = st.text_input("Nome do Cliente:")
@@ -96,7 +96,7 @@ def tela_clientes():
         empresa_abnt = corrige_abnt(empresa)
         endereco_obj = buscar_endereco(cep)
 
-        if endereco_obj:
+        if endereco_obj and not endereco_obj.get("erro"):
             endereco_formatado = f"{endereco_obj['logradouro']} - {endereco_obj['bairro']} - {endereco_obj['localidade']}/{endereco_obj['uf']}, nº {numero}"
         else:
             endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
@@ -117,21 +117,19 @@ def tela_clientes():
 
         st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
-    # Mostrar o resumo e botão de envio só se tiver confirmação
+    # Mostrar o resumo e botão de envio
     if st.session_state.resumo_confirmado:
         dados = st.session_state.dados_confirmados
-        st.markdown(f"""
-        ### 📄 Resumo do cadastro
-        **Nome:** {dados['nome']}  
-        **CPF/CNPJ:** {dados['cpf']}  
-        **Empresa:** {dados['empresa']}  
-        **Telefone:** {dados['telefone']}  
-        **E-mail:** {dados['email']}  
-        **Endereço:** {dados['endereco_formatado']}  
-        """)
+        st.markdown("### 📄 Resumo do cadastro")
+        st.markdown(f"**Nome:** {dados['nome']}")
+        st.markdown(f"**CPF/CNPJ:** {dados['cpf']}")
+        st.markdown(f"**Empresa:** {dados['empresa']}")
+        st.markdown(f"**Telefone:** {dados['telefone']}")
+        st.markdown(f"**E-mail:** {dados['email']}")
+        st.markdown(f"**Endereço:** {dados['endereco_formatado']}")
 
         if dados["imagem"]:
-            st.image(dados["imagem"], width=160, caption="Foto selecionada")
+            st.image(dados["imagem"], width=160, caption="📸 Foto selecionada")
 
         if st.button("🚀 Enviar para o Jira"):
             with st.spinner("Enviando para o Jira..."):
@@ -142,9 +140,10 @@ def tela_clientes():
                 )
                 if issue_key:
                     if dados["imagem"]:
-                        anexar_foto(issue_key, dados["imagem"])
+                        sucesso_foto = anexar_foto(issue_key, dados["imagem"])
+                        if not sucesso_foto:
+                            st.warning("⚠️ Cliente criado, mas não foi possível anexar a foto.")
                     st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-                    # Resetar para novo cadastro
+                    # Resetar dados
                     st.session_state.resumo_confirmado = False
                     st.session_state.dados_confirmados = {}
-
