@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-from datetime import datetime
 import unicodedata
 import re
 import base64
@@ -51,7 +50,6 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
             "description": endereco_formatado
         }
     }
-
     response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
     if response.status_code == 201:
         return response.json().get("key")
@@ -69,11 +67,28 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
-# === TELA DE CLIENTES ===
+def buscar_clientes_jira(termo_busca):
+    jql = f"""
+    project = MC AND issuetype = Clientes AND (
+        summary ~ "{termo_busca}" OR
+        customfield_10040 ~ "{termo_busca}" OR
+        customfield_10041 ~ "{termo_busca}" OR
+        customfield_10042 ~ "{termo_busca}"
+    ) ORDER BY created DESC
+    """
+    url = f"{JIRA_URL}/rest/api/2/search"
+    params = {"jql": jql, "maxResults": 50}
+    response = requests.get(url, headers=JIRA_HEADERS, params=params)
+    if response.status_code == 200:
+        return response.json().get("issues", [])
+    else:
+        st.error(f"Erro ao buscar clientes: {response.text}")
+        return []
+
+# === TELA 1: CADASTRO DE CLIENTES ===
 def tela_clientes():
     st.header("👤 Cadastro de Clientes")
 
-    # Inicializar variáveis de sessão
     if "resumo_confirmado" not in st.session_state:
         st.session_state.resumo_confirmado = False
     if "dados_confirmados" not in st.session_state:
@@ -117,7 +132,6 @@ def tela_clientes():
 
         st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
-    # Mostrar o resumo e botão de envio
     if st.session_state.resumo_confirmado:
         dados = st.session_state.dados_confirmados
         st.markdown("### 📄 Resumo do cadastro")
@@ -127,7 +141,6 @@ def tela_clientes():
         st.markdown(f"**Telefone:** {dados['telefone']}")
         st.markdown(f"**E-mail:** {dados['email']}")
         st.markdown(f"**Endereço:** {dados['endereco_formatado']}")
-
         if dados["imagem"]:
             st.image(dados["imagem"], width=160, caption="📸 Foto selecionada")
 
@@ -144,6 +157,79 @@ def tela_clientes():
                         if not sucesso_foto:
                             st.warning("⚠️ Cliente criado, mas não foi possível anexar a foto.")
                     st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-                    # Resetar dados
                     st.session_state.resumo_confirmado = False
                     st.session_state.dados_confirmados = {}
+
+# === TELA 2: BUSCA E EDIÇÃO DE CLIENTES ===
+def tela_busca_edicao_clientes():
+    st.header("🔍 Buscar e Editar Clientes")
+
+    termo = st.text_input("Digite nome, CPF, telefone ou e-mail para buscar:")
+    if termo:
+        with st.spinner("🔍 Buscando..."):
+            resultados = buscar_clientes_jira(termo)
+        if resultados:
+            st.success(f"✅ {len(resultados)} cliente(s) encontrado(s)")
+            for issue in resultados:
+                key = issue["key"]
+                fields = issue["fields"]
+                nome = fields.get("customfield_10038", "—")
+                cpf = fields.get("customfield_10040", "—")
+                empresa = fields.get("customfield_10051", "—")
+                telefone = fields.get("customfield_10041", "—")
+                email = fields.get("customfield_10042", "—")
+
+                with st.expander(f"👤 {nome} ({key})"):
+                    st.markdown(f"**Empresa:** {empresa}")
+                    st.markdown(f"**CPF/CNPJ:** {cpf}")
+                    st.markdown(f"**Telefone:** {telefone}")
+                    st.markdown(f"**E-mail:** {email}")
+                    if st.button(f"✏️ Editar {key}", key=f"editar_{key}"):
+                        st.session_state.cliente_edicao = {
+                            "key": key,
+                            "nome": nome,
+                            "cpf": cpf,
+                            "empresa": empresa,
+                            "telefone": telefone,
+                            "email": email,
+                            "cep": fields.get("customfield_10133", ""),
+                            "numero": fields.get("customfield_10139", ""),
+                            "complemento": fields.get("customfield_10044", "")
+                        }
+                        st.experimental_rerun()
+
+    if "cliente_edicao" in st.session_state:
+        cliente = st.session_state.cliente_edicao
+        st.subheader(f"✏️ Editar Cliente: {cliente['nome']} ({cliente['key']})")
+        with st.form("form_edicao"):
+            nome = st.text_input("Nome:", value=cliente["nome"])
+            cpf = st.text_input("CPF/CNPJ:", value=cliente["cpf"])
+            empresa = st.text_input("Empresa:", value=cliente["empresa"])
+            telefone = st.text_input("Telefone:", value=cliente["telefone"])
+            email = st.text_input("E-mail:", value=cliente["email"])
+            cep = st.text_input("CEP:", value=cliente["cep"])
+            numero = st.text_input("Nº:", value=cliente["numero"])
+            complemento = st.text_input("Complemento:", value=cliente["complemento"])
+            salvar = st.form_submit_button("💾 Salvar alterações")
+
+        if salvar:
+            payload = {
+                "fields": {
+                    "summary": nome,
+                    "customfield_10038": nome,
+                    "customfield_10040": cpf,
+                    "customfield_10051": empresa,
+                    "customfield_10041": telefone,
+                    "customfield_10042": email,
+                    "customfield_10133": cep,
+                    "customfield_10139": numero,
+                    "customfield_10044": complemento,
+                }
+            }
+            url = f"{JIRA_URL}/rest/api/2/issue/{cliente['key']}"
+            resp = requests.put(url, headers=JIRA_HEADERS, json=payload)
+            if resp.status_code == 204:
+                st.success("✅ Cliente atualizado com sucesso!")
+                del st.session_state.cliente_edicao
+            else:
+                st.error(f"Erro ao atualizar cliente: {resp.text}")
