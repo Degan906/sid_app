@@ -1,107 +1,125 @@
-
 import streamlit as st
 import requests
 from datetime import datetime
+import unicodedata
+import re
 import base64
-from modules.utils import corrigir_abnt, buscar_endereco_por_cep
 
-# === Configurações do Jira ===
+# === CONFIGURAÇÕES DO JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
-API_URL = f"{JIRA_URL}/rest/api/2"
-EMAIL = "degan906@gmail.com"
-TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
-PROJECT_KEY = "MC"
-ISSUE_TYPE = "Clientes"
-HEADERS = {
-    "Authorization": f"Basic {base64.b64encode(f'{EMAIL}:{TOKEN}'.encode()).decode()}",
+JIRA_EMAIL = "degan906@gmail.com"
+JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
+JIRA_HEADERS = {
+    "Authorization": f"Basic {base64.b64encode(f'{JIRA_EMAIL}:{JIRA_API_TOKEN}'.encode()).decode()}",
+    "Accept": "application/json",
     "Content-Type": "application/json"
 }
 
-# === Função para criar cliente ===
-def criar_cliente(payload, foto):
-    resposta = requests.post(f"{API_URL}/issue", headers=HEADERS, json=payload)
-    if resposta.status_code == 201:
-        issue_key = resposta.json()["key"]
-        if foto:
-            upload_url = f"{API_URL}/issue/{issue_key}/attachments"
-            files = {"file": (foto.name, foto.getvalue())}
-            headers_upload = HEADERS.copy()
-            headers_upload.pop("Content-Type")
-            headers_upload["X-Atlassian-Token"] = "no-check"
-            requests.post(upload_url, headers=headers_upload, files=files)
-        return True, issue_key
-    else:
-        return False, resposta.text
+# === FUNÇÕES AUXILIARES ===
+def corrige_abnt(texto):
+    texto = texto.strip().lower()
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    texto = re.sub(r'[^a-zA-Z0-9\s]', '', texto)
+    texto = ' '.join(word.capitalize() for word in texto.split())
+    return texto
 
-# === Tela principal ===
+def buscar_endereco(cep):
+    try:
+        resposta = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        if resposta.status_code == 200:
+            return resposta.json()
+    except:
+        return None
+    return None
+
+def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
+    payload = {
+        "fields": {
+            "project": {"key": "MC"},
+            "summary": nome,
+            "issuetype": {"name": "Clientes"},
+            "customfield_10038": nome,
+            "customfield_10040": cpf,
+            "customfield_10051": empresa,
+            "customfield_10041": telefone,
+            "customfield_10042": email,
+            "customfield_10133": cep,
+            "customfield_10039": "",
+            "customfield_10044": complemento,
+            "customfield_10139": numero,
+            "description": endereco_formatado
+        }
+    }
+
+    response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
+    if response.status_code == 201:
+        return response.json().get("key")
+    else:
+        st.error(f"Erro ao criar cliente: {response.text}")
+        return None
+
+def anexar_foto(issue_key, imagem):
+    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
+    headers = {
+        "Authorization": JIRA_HEADERS["Authorization"],
+        "X-Atlassian-Token": "no-check"
+    }
+    files = {"file": (imagem.name, imagem.getvalue())}
+    response = requests.post(url, headers=headers, files=files)
+    return response.status_code == 200
+
+# === TELA DE CLIENTES ===
 def tela_clientes():
-    st.subheader("👤 Cadastro de Clientes")
+    st.header("👤 Cadastro de Clientes")
 
     with st.form("form_cliente"):
-        nome = st.text_input("Nome completo:")
-        cpf_cnpj = st.text_input("CPF/CNPJ:")
+        nome = st.text_input("Nome do Cliente:")
+        cpf = st.text_input("CPF/CNPJ:")
         empresa = st.text_input("Empresa:")
         telefone = st.text_input("Telefone:")
         email = st.text_input("E-mail:")
+        cep = st.text_input("CEP:")
+        numero = st.text_input("Nº")
+        complemento = st.text_input("Complemento")
+        imagem = st.file_uploader("Foto do cliente:", type=["png", "jpg", "jpeg"])
 
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            cep = st.text_input("CEP:")
-            numero = st.text_input("Número:")
-            complemento = st.text_input("Complemento:")
-            buscar = st.form_submit_button("🔍 Buscar Endereço")
-        with col2:
-            foto = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
+        buscar = st.form_submit_button("🔍 Buscar Endereço")
 
-        endereco = ""
+        endereco_formatado = ""
+        endereco_obj = None
+
         if buscar and cep:
-            endereco = buscar_endereco_por_cep(cep)
-            if endereco:
-                st.success(f"Endereço localizado: {endereco}")
+            endereco_obj = buscar_endereco(cep)
+            if endereco_obj:
+                endereco_formatado = f"{endereco_obj['logradouro']} - {endereco_obj['bairro']} - {endereco_obj['localidade']}/{endereco_obj['uf']}, nº {numero}"
+                st.success(f"Endereço encontrado: {endereco_formatado}")
             else:
-                st.warning("CEP não encontrado.")
+                st.error("CEP não encontrado")
 
         confirmar = st.form_submit_button("✅ Confirmar cadastro")
 
-    if confirmar:
-        nome_abnt = corrigir_abnt(nome)
-        endereco_formatado = f"{endereco} - nº {numero}, {complemento}" if endereco else "Não informado"
+        if confirmar:
+            nome_abnt = corrige_abnt(nome)
+            empresa_abnt = corrige_abnt(empresa)
+            endereco_formatado = endereco_formatado or f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
 
-        with st.expander("📋 Resumo do cadastro gerado", expanded=True):
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.markdown(f"""
-                **Nome:** {nome_abnt}  
-                **CPF/CNPJ:** {cpf_cnpj}  
-                **Empresa:** {empresa}  
-                **Telefone:** {telefone}  
-                **E-mail:** {email}  
-                **Endereço:** {endereco_formatado}
-                """)
-            with col2:
-                if foto:
-                    st.image(foto, width=150, caption="Foto selecionada")
+            st.markdown("""
+            ### 📄 Resumo do cadastro gerado
+            **Nome:** {0}  
+            **CPF/CNPJ:** {1}  
+            **Empresa:** {2}  
+            **Telefone:** {3}  
+            **E-mail:** {4}  
+            **Endereço:** {5}  
+            """.format(nome_abnt, cpf, empresa_abnt, telefone, email, endereco_formatado))
 
-        # Monta o payload da issue
-        payload = {
-            "fields": {
-                "project": {"key": PROJECT_KEY},
-                "issuetype": {"name": ISSUE_TYPE},
-                "summary": nome_abnt,
-                "customfield_10038": nome_abnt,
-                "customfield_10040": cpf_cnpj,
-                "customfield_10051": empresa,
-                "customfield_10041": telefone,
-                "customfield_10042": email,
-                "customfield_10133": cep,
-                "customfield_10044": complemento,
-                "customfield_10139": numero,
-                "description": f"Cliente cadastrado via SID em {datetime.now().strftime('%d/%m/%Y')}"
-            }
-        }
+            if imagem:
+                st.image(imagem, width=160, caption="Foto selecionada")
 
-        sucesso, retorno = criar_cliente(payload, foto)
-        if sucesso:
-            st.success(f"✅ Cliente criado com sucesso no Jira! Issue: {retorno}")
-        else:
-            st.error(f"Erro ao criar cliente: {retorno}")
+            if st.button("🚀 Enviar para o Jira"):
+                issue_key = criar_issue_jira(nome_abnt, cpf, empresa_abnt, telefone, email, cep, numero, complemento, endereco_formatado)
+                if issue_key and imagem:
+                    anexar_foto(issue_key, imagem)
+                if issue_key:
+                    st.success(f"Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
