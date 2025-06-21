@@ -56,21 +56,21 @@ def buscar_cep(cep):
     return None
 
 def tela_clientes():
-    st.header("👤 Cadastro de Clientes V1")
+    st.header("👤 Cadastro de Clientes")
     inicializar_csv()
     df_clientes = listar_clientes()
 
     with st.expander("➕ Novo Cliente"):
+        cep = st.text_input("CEP")
+        if st.button("🔍 Buscar Endereço"):
+            endereco = buscar_cep(cep) or "CEP inválido ou não encontrado"
+            st.session_state.endereco_busca = endereco
+
         with st.form("form_cliente"):
             nome = st.text_input("Nome completo")
             cpf_cnpj = st.text_input("CPF ou CNPJ")
             telefone = st.text_input("Telefone")
             email = st.text_input("E-mail")
-            cep = st.text_input("CEP")
-            endereco = ""
-            if st.button("🔍 Buscar Endereço"):
-                endereco = buscar_cep(cep) or "CEP inválido ou não encontrado"
-                st.session_state.endereco_busca = endereco
             endereco_final = st.text_input("Endereço", value=st.session_state.get("endereco_busca", ""))
             numero = st.text_input("Número")
             complemento = st.text_input("Complemento")
