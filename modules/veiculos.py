@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import base64
@@ -210,7 +211,7 @@ def tela_busca_edicao_veiculos():
 
     termo = st.text_input("Buscar por placa ou modelo:")
 
-    jql = f'project = MC AND issuetype = "Veículos" ORDER BY created DESC'
+    jql = 'project = MC AND issuetype = "Veículos" ORDER BY created DESC'
     if termo:
         jql = f'project = MC AND issuetype = "Veículos" AND (summary ~ "{termo}" OR customfield_10134 ~ "{termo}") ORDER BY created DESC'
 
@@ -219,7 +220,7 @@ def tela_busca_edicao_veiculos():
         params = {
             "jql": jql,
             "maxResults": 50,
-            "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138"
+            "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138,customfield_10040"
         }
         response = requests.get(url, headers=JIRA_HEADERS, params=params)
 
@@ -238,11 +239,12 @@ def tela_busca_edicao_veiculos():
                     "Modelo": fields.get("customfield_10136", "—"),
                     "Marca": fields.get("customfield_10140", {}).get("value", "—"),
                     "Cor": fields.get("customfield_10137", "—"),
-                    "Ano": fields.get("customfield_10138", "—")
+                    "Ano": fields.get("customfield_10138", "—"),
+                    "CPF/CNPJ": fields.get("customfield_10040", "")
                 })
 
             df = pd.DataFrame(data)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df.drop(columns=["Key"]), use_container_width=True)
 
             for item in data:
                 key = item["Key"]
@@ -254,6 +256,23 @@ def tela_busca_edicao_veiculos():
                     st.markdown(f"**Cor:** {item['Cor']}")
                     st.markdown(f"**Ano:** {item['Ano']}")
 
+                    # 🔍 Buscar dados do cliente
+                    cpf_cliente = item.get("CPF/CNPJ")
+                    cliente = buscar_cliente_por_cpf(cpf_cliente)
+                    if cliente:
+                        st.markdown("#### 👤 Cliente Associado")
+                        st.markdown(f"- **Nome:** {cliente.get('nome', '—')}")
+                        st.markdown(f"- **Telefone:** {cliente.get('telefone', '—')}")
+                        st.markdown(f"- **CPF/CNPJ:** {cpf_cliente}")
+                    else:
+                        st.warning("Cliente não encontrado no Jira.")
+
+                    # 🖼️ Mostrar foto (se houver)
+                    imagem = get_attachments(key)
+                    if imagem:
+                        st.image(imagem, width=200, caption="📸 Foto do veículo")
+
+                    # Botão editar
                     if st.button(f"✏️ Editar {key}", key=f"btn_{key}"):
                         st.session_state[f"editar_{key}"] = True
 
@@ -285,3 +304,4 @@ def tela_busca_edicao_veiculos():
             st.warning("Nenhum veículo encontrado.")
     else:
         st.error("Erro na requisição ao Jira.")
+
