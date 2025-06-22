@@ -134,6 +134,43 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
+
+def buscar_veiculos():
+    jql = 'project = MC AND issuetype = "Veículos" ORDER BY created DESC'
+    url = f"{JIRA_URL}/rest/api/2/search"
+    params = {
+        "jql": jql,
+        "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138,customfield_10040",
+        "maxResults": 100
+    }
+    resp = requests.get(url, headers=JIRA_HEADERS, params=params)
+    if resp.status_code == 200:
+        issues = resp.json().get("issues", [])
+        veiculos = []
+        for issue in issues:
+            fields = issue["fields"]
+            cpf = fields.get("customfield_10040")
+            cliente = buscar_cliente_por_cpf(cpf)
+
+            veiculos.append({
+                "Key": issue["key"],
+                "Resumo": fields.get("summary"),
+                "Placa": fields.get("customfield_10134"),
+                "Modelo": fields.get("customfield_10136"),
+                "Marca": fields.get("customfield_10140", {}).get("value"),
+                "Cor": fields.get("customfield_10137"),
+                "Ano": fields.get("customfield_10138"),
+                "CPF/CNPJ": cpf,
+                "Cliente": cliente["nome"] if cliente else "",
+                "Telefone": cliente["telefone"] if cliente else ""
+            })
+        return veiculos
+    else:
+        st.error("Erro ao buscar veículos cadastrados.")
+        return []
+
+
+
 def tela_veiculos():
     st.header("🚘 Cadastro de Veículos")
     marcas = get_marcas()
