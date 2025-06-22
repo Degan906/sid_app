@@ -27,7 +27,11 @@ def corrige_abnt(texto):
 def buscar_clientes():
     jql = 'project = MC AND issuetype = "Clientes" ORDER BY created DESC'
     url = f"{JIRA_URL}/rest/api/2/search"
-    params = {"jql": jql, "maxResults": 100, "fields": "summary,customfield_10040,customfield_10041,customfield_10042"}
+    params = {
+        "jql": jql,
+        "maxResults": 100,
+        "fields": "summary,customfield_10040,customfield_10041,customfield_10042"
+    }
     r = requests.get(url, headers=JIRA_HEADERS, params=params)
     if r.status_code == 200:
         return r.json().get("issues", [])
@@ -36,7 +40,11 @@ def buscar_clientes():
 def buscar_veiculos_do_cliente(cpf):
     jql = f'project = MC AND issuetype = "Veículos" AND "CPF/CNPJ" ~ "{cpf}" ORDER BY created DESC'
     url = f"{JIRA_URL}/rest/api/2/search"
-    params = {"jql": jql, "maxResults": 50, "fields": "summary,customfield_10134"}
+    params = {
+        "jql": jql,
+        "maxResults": 50,
+        "fields": "summary,customfield_10134"
+    }
     r = requests.get(url, headers=JIRA_HEADERS, params=params)
     if r.status_code == 200:
         return r.json().get("issues", [])
@@ -49,8 +57,8 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
             "issuetype": {"id": "10030"},
             "summary": f"OS - {cliente_nome} ({cliente_cpf}) - {veiculo_key}",
             "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}",
-            "customfield_10065": data_entrada,   # Data de entrada (Data-inicio)
-            "customfield_10066": data_saida      # Data de saída (Data-termino)
+            "customfield_10065": data_entrada,   # Data de entrada
+            "customfield_10066": data_saida      # Data de saída
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
@@ -100,25 +108,7 @@ def tela_manutencoes():
     veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
     veiculo_key = veiculo_info["key"]
 
-    # Mostrar dados do veículo
+    # Mostrar dados do veículo (sem imagem)
     st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
     st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
     st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
-
-    # Buscar imagem (anexo)
-    def obter_foto_veiculo(issue_key):
-        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
-        r = requests.get(url, headers=JIRA_HEADERS)
-        if r.status_code == 200:
-            attachments = r.json()["fields"].get("attachment", [])
-            for a in attachments:
-                if a["mimeType"].startswith("image"):
-                    return a["content"]
-        return None
-
-    foto_url = obter_foto_veiculo(veiculo_key)
-    if foto_url:
-        st.image(foto_url, width=300, caption="📸 Foto do Veículo")
-    else:
-        st.info("Nenhuma imagem encontrada para este veículo.")
-
