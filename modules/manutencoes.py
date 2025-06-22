@@ -68,19 +68,19 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
-    return r.status_code == 201
+    if r.status_code != 201:
+        st.error(f"Erro ao adicionar subtarefa: {r.status_code} - {r.text}")
+        return False
+    return True
 
-# === TELA DE MANUTENÇÃO ===
+# === TELA DE MANUTENÇÕES ===
 def tela_manutencoes():
-    st.header("🛠️ Abertura de Ordem de Serviço (OS)")
+    st.markdown("## 🛠️ Abertura de Ordem de Serviço (OS)")
 
-    if "os_criada" not in st.session_state:
-        st.session_state.os_criada = None
-        st.session_state.cliente = {}
-        st.session_state.veiculo_key = ""
-        st.session_state.veiculo_desc = ""
+    if "os_ativa" not in st.session_state:
+        st.session_state.os_ativa = None
 
-    if not st.session_state.os_criada:
+    if not st.session_state.os_ativa:
         st.subheader("👤 Selecionar Cliente")
         clientes = buscar_clientes()
         nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
@@ -116,20 +116,23 @@ def tela_manutencoes():
         if st.button("✅ Criar Ordem de Serviço"):
             os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
             if os_key:
-                st.session_state.os_criada = os_key
-                st.session_state.cliente = {"nome": nome_cliente, "cpf": cpf}
-                st.session_state.veiculo_key = veiculo_key
-                st.session_state.veiculo_desc = veiculo_info['fields'].get('summary')
-                st.experimental_rerun()
+                st.session_state.os_ativa = {
+                    "key": os_key,
+                    "cliente": nome_cliente,
+                    "cpf": cpf,
+                    "veiculo": veiculo_info['fields'].get('summary')
+                }
+                st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
+                st.rerun()
 
     else:
-        os_key = st.session_state.os_criada
-        st.subheader(f"📌 OS em andamento: {os_key}")
-        st.markdown(f"**Cliente:** {st.session_state.cliente['nome']} ({st.session_state.cliente['cpf']})")
-        st.markdown(f"**Veículo:** {st.session_state.veiculo_desc} ({st.session_state.veiculo_key})")
+        os_key = st.session_state.os_ativa["key"]
+        st.markdown(f"### 📌 OS em andamento: {os_key}")
+        st.markdown(f"**Cliente:** {st.session_state.os_ativa['cliente']} ({st.session_state.os_ativa['cpf']})")
+        st.markdown(f"**Veículo:** {st.session_state.os_ativa['veiculo']} ({os_key})")
 
         st.subheader("🧾 Adicionar Serviços ou Peças")
-        with st.form(key="form_subtarefas"):
+        with st.form(key="form_sub"):
             col1, col2 = st.columns(2)
             with col1:
                 tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
@@ -146,14 +149,14 @@ def tela_manutencoes():
                 else:
                     st.error("Erro ao adicionar subtarefa.")
 
-        st.markdown("---")
-        col_fim, col_nova = st.columns(2)
-        if col_fim.button("✅ Finalizar OS"):
-            st.session_state.os_criada = None
-            st.session_state.cliente = {}
-            st.session_state.veiculo_key = ""
-            st.session_state.veiculo_desc = ""
-            st.success("Processo finalizado.")
-        if col_nova.button("➕ Nova OS"):
-            st.session_state.os_criada = None
-            st.experimental_rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ Finalizar OS"):
+                st.session_state.os_ativa = None
+                st.success("OS finalizada com sucesso.")
+                st.rerun()
+
+        with col2:
+            if st.button("➕ Nova OS"):
+                st.session_state.os_ativa = None
+                st.rerun()
