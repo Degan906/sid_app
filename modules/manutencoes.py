@@ -72,63 +72,87 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
 
 # === TELA DE MANUTENÇÃO ===
 def tela_manutencoes():
-    st.header("\U0001F6E0️ Abertura de Ordem de Serviço (OS)")
+    st.header("🛠️ Abertura de Ordem de Serviço (OS)")
 
-    st.subheader("👤 Selecionar Cliente")
-    clientes = buscar_clientes()
-    nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
-    cliente_index = st.selectbox("Buscar por CPF ou Tel", nomes)
-    cliente_escolhido = clientes[nomes.index(cliente_index)]
-    cpf = cliente_escolhido['fields'].get('customfield_10040')
-    nome_cliente = cliente_escolhido['fields'].get('summary')
-    email_cliente = cliente_escolhido['fields'].get('customfield_10042')
+    if "os_criada" not in st.session_state:
+        st.session_state.os_criada = None
+        st.session_state.cliente = {}
+        st.session_state.veiculo_key = ""
+        st.session_state.veiculo_desc = ""
 
-    st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
+    if not st.session_state.os_criada:
+        st.subheader("👤 Selecionar Cliente")
+        clientes = buscar_clientes()
+        nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
+        cliente_index = st.selectbox("Buscar por CPF ou Tel", nomes)
+        cliente_escolhido = clientes[nomes.index(cliente_index)]
+        cpf = cliente_escolhido['fields'].get('customfield_10040')
+        nome_cliente = cliente_escolhido['fields'].get('summary')
+        email_cliente = cliente_escolhido['fields'].get('customfield_10042')
 
-    st.subheader("🚗 Selecionar Veículo")
-    veiculos = buscar_veiculos_do_cliente(cpf)
-    if not veiculos:
-        st.warning("Este cliente não possui veículos cadastrados.")
-        return
+        st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
-    veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
-    veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
-    veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
-    veiculo_key = veiculo_info["key"]
+        st.subheader("🚗 Selecionar Veículo")
+        veiculos = buscar_veiculos_do_cliente(cpf)
+        if not veiculos:
+            st.warning("Este cliente não possui veículos cadastrados.")
+            return
 
-    st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
-    st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
-    st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
+        veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
+        veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
+        veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
+        veiculo_key = veiculo_info["key"]
 
-    # Formulário da OS
-    st.subheader("📋 Detalhes da OS")
-    km = st.text_input("Quilometragem atual do veículo (KM):")
-    data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
-    data_saida = st.date_input("Data Prevista de Saída", value=datetime.date.today())
-    descricao = st.text_area("Descrição geral do problema ou solicitação:")
+        st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
+        st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
+        st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-    if st.button("✅ Criar Ordem de Serviço"):
-        os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
-        if os_key:
-            st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
+        st.subheader("📋 Detalhes da OS")
+        km = st.text_input("Quilometragem atual do veículo (KM):")
+        data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
+        data_saida = st.date_input("Data Prevista de Saída", value=datetime.date.today())
+        descricao = st.text_area("Descrição geral do problema ou solicitação:")
 
-            # Adicionar serviços ou peças
-            st.subheader("🧾 Adicionar Serviços ou Peças")
-            st.markdown("Você pode adicionar múltiplos serviços ou peças abaixo:")
+        if st.button("✅ Criar Ordem de Serviço"):
+            os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
+            if os_key:
+                st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
+                st.session_state.os_criada = os_key
+                st.session_state.cliente = {"nome": nome_cliente, "cpf": cpf}
+                st.session_state.veiculo_key = veiculo_key
+                st.session_state.veiculo_desc = veiculo_info['fields'].get('summary')
+    else:
+        os_key = st.session_state.os_criada
+        st.subheader(f"📌 OS em andamento: {os_key}")
+        st.markdown(f"**Cliente:** {st.session_state.cliente['nome']} ({st.session_state.cliente['cpf']})")
+        st.markdown(f"**Veículo:** {st.session_state.veiculo_desc} ({st.session_state.veiculo_key})")
 
-            with st.form(key="form_subtarefas"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
-                    descricao_sub = st.text_input("Descrição do item")
-                with col2:
-                    quantidade = st.number_input("Quantidade", min_value=1, step=1)
-                    valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
+        st.subheader("🧾 Adicionar Serviços ou Peças")
+        with st.form(key="form_subtarefas"):
+            col1, col2 = st.columns(2)
+            with col1:
+                tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
+                descricao_sub = st.text_input("Descrição do item")
+            with col2:
+                quantidade = st.number_input("Quantidade", min_value=1, step=1)
+                valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
 
-                enviar = st.form_submit_button("➕ Adicionar Subtarefa")
-                if enviar:
-                    sucesso = criar_subtarefa(os_key, descricao_sub, tipo, quantidade, valor)
-                    if sucesso:
-                        st.success("Subtarefa adicionada com sucesso.")
-                    else:
-                        st.error("Erro ao adicionar subtarefa.")
+            enviar = st.form_submit_button("➕ Adicionar Subtarefa")
+            if enviar:
+                sucesso = criar_subtarefa(os_key, descricao_sub, tipo, quantidade, valor)
+                if sucesso:
+                    st.success("Subtarefa adicionada com sucesso.")
+                else:
+                    st.error("Erro ao adicionar subtarefa.")
+
+        st.markdown("---")
+        col_fim, col_nova = st.columns(2)
+        if col_fim.button("✅ Finalizar OS"):
+            st.session_state.os_criada = None
+            st.session_state.cliente = {}
+            st.session_state.veiculo_key = ""
+            st.session_state.veiculo_desc = ""
+            st.success("Processo finalizado.")
+        if col_nova.button("➕ Nova OS"):
+            st.session_state.os_criada = None
+            st.experimental_rerun()
