@@ -48,7 +48,7 @@ def obter_foto_veiculo(issue_key):
     if r.status_code == 200:
         attachments = r.json()["fields"].get("attachment", [])
         for a in attachments:
-            if a["mimeType"].startswith("image"):
+            if a.get("mimeType", "").startswith("image"):
                 return a["content"]
     return None
 
