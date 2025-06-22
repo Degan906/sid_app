@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -57,6 +56,28 @@ def get_marcas():
         st.warning("⚠️ Não foi possível obter a lista de marcas do Jira.")
         return []
 
+def buscar_cliente_por_cpf(cpf):
+    if not cpf:
+        return None
+    jql = f'project = MC AND issuetype = "Clientes" AND "CPF/CNPJ" ~ "{cpf}"'
+    url = f"{JIRA_URL}/rest/api/2/search"
+    params = {
+        "jql": jql,
+        "fields": "customfield_10038,customfield_10040,customfield_10041",
+        "maxResults": 1
+    }
+    response = requests.get(url, headers=JIRA_HEADERS, params=params)
+    if response.status_code == 200:
+        issues = response.json().get("issues", [])
+        if issues:
+            fields = issues[0]["fields"]
+            return {
+                "nome": fields.get("customfield_10038", ""),
+                "cpf": fields.get("customfield_10040", ""),
+                "telefone": fields.get("customfield_10041", "")
+            }
+    return None
+
 def buscar_veiculos():
     jql = 'project = MC AND issuetype = "Veículos" ORDER BY created DESC'
     url = f"{JIRA_URL}/rest/api/2/search"
@@ -71,6 +92,9 @@ def buscar_veiculos():
         veiculos = []
         for issue in issues:
             fields = issue["fields"]
+            cpf = fields.get("customfield_10040")
+            cliente = buscar_cliente_por_cpf(cpf)
+
             veiculos.append({
                 "Key": issue["key"],
                 "Resumo": fields.get("summary"),
@@ -79,7 +103,9 @@ def buscar_veiculos():
                 "Marca": fields.get("customfield_10140", {}).get("value"),
                 "Cor": fields.get("customfield_10137"),
                 "Ano": fields.get("customfield_10138"),
-                "CPF/CNPJ": fields.get("customfield_10040")
+                "CPF/CNPJ": cpf,
+                "Cliente": cliente["nome"] if cliente else "",
+                "Telefone": cliente["telefone"] if cliente else ""
             })
         return veiculos
     else:
@@ -133,43 +159,6 @@ def anexar_foto(issue_key, imagem):
     files = { "file": ("veiculo.jpg", imagem.getvalue()) }
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
-
-
-def buscar_veiculos():
-    jql = 'project = MC AND issuetype = "Veículos" ORDER BY created DESC'
-    url = f"{JIRA_URL}/rest/api/2/search"
-    params = {
-        "jql": jql,
-        "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138,customfield_10040",
-        "maxResults": 100
-    }
-    resp = requests.get(url, headers=JIRA_HEADERS, params=params)
-    if resp.status_code == 200:
-        issues = resp.json().get("issues", [])
-        veiculos = []
-        for issue in issues:
-            fields = issue["fields"]
-            cpf = fields.get("customfield_10040")
-            cliente = buscar_cliente_por_cpf(cpf)
-
-            veiculos.append({
-                "Key": issue["key"],
-                "Resumo": fields.get("summary"),
-                "Placa": fields.get("customfield_10134"),
-                "Modelo": fields.get("customfield_10136"),
-                "Marca": fields.get("customfield_10140", {}).get("value"),
-                "Cor": fields.get("customfield_10137"),
-                "Ano": fields.get("customfield_10138"),
-                "CPF/CNPJ": cpf,
-                "Cliente": cliente["nome"] if cliente else "",
-                "Telefone": cliente["telefone"] if cliente else ""
-            })
-        return veiculos
-    else:
-        st.error("Erro ao buscar veículos cadastrados.")
-        return []
-
-
 
 def tela_veiculos():
     st.header("🚘 Cadastro de Veículos")
@@ -252,6 +241,14 @@ def tela_veiculos():
         st.markdown(f"**Ano:** {dados.get('ano', '')}")
         st.markdown(f"**Resumo (summary):** {dados.get('resumo', '')}")
         st.markdown(f"**CPF/CNPJ do Cliente:** {dados.get('cpf_cliente', '')}")
+
+        dados_cliente = buscar_cliente_por_cpf(dados.get("cpf_cliente", ""))
+        if dados_cliente:
+            st.markdown(f"**👤 Nome do Cliente:** {dados_cliente['nome']}")
+            st.markdown(f"**📞 Telefone:** {dados_cliente['telefone']}")
+        else:
+            st.warning("Cliente não encontrado no cadastro.")
+
         if dados.get("imagem"):
             st.image(dados["imagem"], width=200, caption="📸 Foto selecionada")
 
