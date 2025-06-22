@@ -212,6 +212,11 @@ def tela_busca_edicao_clientes():
                     st.markdown(f"**Empresa:** {fields.get('customfield_10051', '—')}")
                     st.markdown(f"**Telefone:** {fields.get('customfield_10041', '—')}")
                     st.markdown(f"**E-mail:** {fields.get('customfield_10042', '—')}")
+                    st.markdown(f"**CPF/CNPJ:** {fields.get('customfield_10040', '—')}")
+                    st.markdown(f"**CEP:** {fields.get('customfield_10133', '—')}")
+                    st.markdown(f"**Número:** {fields.get('customfield_10139', '—')}")
+                    st.markdown(f"**Complemento:** {fields.get('customfield_10044', '—')}")
+
 
                     if st.button(f"✏️ Editar {key}", key=f"editar_btn_{key}"):
                         st.session_state[f"editar_{key}"] = True
