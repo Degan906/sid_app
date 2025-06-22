@@ -47,11 +47,10 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
         "fields": {
             "project": {"key": "MC"},
             "issuetype": {"id": "10030"},
-            "summary": f"OS - {cliente_nome} ({cliente_cpf})",
-            "customfield_10040": cliente_cpf,
-            "customfield_10134": veiculo_key,
-            "description": descricao,
-            "duedate": data_saida,
+            "summary": f"OS - {cliente_nome} ({cliente_cpf}) - {veiculo_key}",
+            "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}",
+            "customfield_10065": data_entrada,   # Data de entrada (Data-inicio)
+            "customfield_10066": data_saida      # Data de saída (Data-termino)
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
@@ -59,6 +58,7 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
         return r.json().get("key")
     st.error(f"Erro ao criar OS: {r.status_code} - {r.text}")
     return None
+
 
 def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
     payload = {
