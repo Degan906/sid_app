@@ -27,11 +27,7 @@ def corrige_abnt(texto):
 def buscar_clientes():
     jql = 'project = MC AND issuetype = "Clientes" ORDER BY created DESC'
     url = f"{JIRA_URL}/rest/api/2/search"
-    params = {
-        "jql": jql,
-        "maxResults": 100,
-        "fields": "summary,customfield_10040,customfield_10041,customfield_10042"
-    }
+    params = {"jql": jql, "maxResults": 100, "fields": "summary,customfield_10040,customfield_10041,customfield_10042"}
     r = requests.get(url, headers=JIRA_HEADERS, params=params)
     if r.status_code == 200:
         return r.json().get("issues", [])
@@ -40,11 +36,7 @@ def buscar_clientes():
 def buscar_veiculos_do_cliente(cpf):
     jql = f'project = MC AND issuetype = "Veículos" AND "CPF/CNPJ" ~ "{cpf}" ORDER BY created DESC'
     url = f"{JIRA_URL}/rest/api/2/search"
-    params = {
-        "jql": jql,
-        "maxResults": 50,
-        "fields": "summary,customfield_10134"
-    }
+    params = {"jql": jql, "maxResults": 50, "fields": "summary,customfield_10134"}
     r = requests.get(url, headers=JIRA_HEADERS, params=params)
     if r.status_code == 200:
         return r.json().get("issues", [])
@@ -57,8 +49,8 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
             "issuetype": {"id": "10030"},
             "summary": f"OS - {cliente_nome} ({cliente_cpf}) - {veiculo_key}",
             "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}",
-            "customfield_10065": data_entrada,   # Data de entrada
-            "customfield_10066": data_saida      # Data de saída
+            "customfield_10065": data_entrada,
+            "customfield_10066": data_saida
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
@@ -82,9 +74,8 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
 
 # === TELA DE MANUTENÇÃO ===
 def tela_manutencoes():
-    st.header("🛠️ Abertura de Ordem de Serviço (OS)")
+    st.header("\U0001F6E0️ Abertura de Ordem de Serviço (OS)")
 
-    # Selecionar Cliente
     st.subheader("👤 Selecionar Cliente")
     clientes = buscar_clientes()
     nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
@@ -96,7 +87,6 @@ def tela_manutencoes():
 
     st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
-    # Selecionar Veículo
     st.subheader("🚗 Selecionar Veículo")
     veiculos = buscar_veiculos_do_cliente(cpf)
     if not veiculos:
@@ -108,7 +98,39 @@ def tela_manutencoes():
     veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
     veiculo_key = veiculo_info["key"]
 
-    # Mostrar dados do veículo (sem imagem)
     st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
     st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
     st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
+
+    # Formulário da OS
+    st.subheader("📋 Detalhes da OS")
+    km = st.text_input("Quilometragem atual do veículo (KM):")
+    data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
+    data_saida = st.date_input("Data Prevista de Saída", value=datetime.date.today())
+    descricao = st.text_area("Descrição geral do problema ou solicitação:")
+
+    if st.button("✅ Criar Ordem de Serviço"):
+        os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
+        if os_key:
+            st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
+
+            # Adicionar serviços ou peças
+            st.subheader("🧾 Adicionar Serviços ou Peças")
+            st.markdown("Você pode adicionar múltiplos serviços ou peças abaixo:")
+
+            with st.form(key="form_subtarefas"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
+                    descricao_sub = st.text_input("Descrição do item")
+                with col2:
+                    quantidade = st.number_input("Quantidade", min_value=1, step=1)
+                    valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
+
+                enviar = st.form_submit_button("➕ Adicionar Subtarefa")
+                if enviar:
+                    sucesso = criar_subtarefa(os_key, descricao_sub, tipo, quantidade, valor)
+                    if sucesso:
+                        st.success("Subtarefa adicionada com sucesso.")
+                    else:
+                        st.error("Erro ao adicionar subtarefa.")
