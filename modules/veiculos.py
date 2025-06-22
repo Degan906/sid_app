@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -16,19 +15,6 @@ JIRA_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json"
 }
-
-def get_attachments(issue_key):
-    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
-    response = requests.get(url, headers=JIRA_HEADERS)
-    if response.status_code == 200:
-        attachments = response.json()["fields"].get("attachment", [])
-        if attachments:
-            first = attachments[0]
-            image_url = first["content"]
-            image_resp = requests.get(image_url, headers=JIRA_HEADERS)
-            if image_resp.status_code == 200:
-                return BytesIO(image_resp.content)
-    return None
 
 def corrige_abnt(texto):
     texto = texto.strip().lower()
@@ -54,7 +40,6 @@ def get_marcas():
         except (KeyError, IndexError):
             return []
     else:
-        st.warning("⚠️ Não foi possível obter a lista de marcas do Jira.")
         return []
 
 def buscar_cliente_por_cpf(cpf):
@@ -95,7 +80,6 @@ def buscar_veiculos():
             fields = issue["fields"]
             cpf = fields.get("customfield_10040")
             cliente = buscar_cliente_por_cpf(cpf)
-
             veiculos.append({
                 "Key": issue["key"],
                 "Resumo": fields.get("summary"),
@@ -110,7 +94,6 @@ def buscar_veiculos():
             })
         return veiculos
     else:
-        st.error("Erro ao buscar veículos cadastrados.")
         return []
 
 def criar_issue_veiculo(placa, modelo, marca, cor, ano, resumo, cpf_cliente=None):
@@ -151,6 +134,19 @@ def atualizar_veiculo(issue_key, dados):
     response = requests.put(url, json=payload, headers=JIRA_HEADERS)
     return response.status_code == 204
 
+def get_attachments(issue_key):
+    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
+    response = requests.get(url, headers=JIRA_HEADERS)
+    if response.status_code == 200:
+        attachments = response.json()["fields"].get("attachment", [])
+        if attachments:
+            first = attachments[0]
+            image_url = first["content"]
+            image_resp = requests.get(image_url, headers=JIRA_HEADERS)
+            if image_resp.status_code == 200:
+                return BytesIO(image_resp.content)
+    return None
+
 def anexar_foto(issue_key, imagem):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
     headers = {
@@ -165,10 +161,17 @@ def tela_veiculos():
     st.set_page_config(page_title="Cadastro de Veículos", layout="wide")
     st.header("🚘 Cadastro de Veículos")
 
-    # Botão simples para novo cadastro
+    if "veiculo_confirmado" not in st.session_state:
+        st.session_state.veiculo_confirmado = False
+    if "veiculo_dados" not in st.session_state:
+        st.session_state.veiculo_dados = {}
+    if "modo_novo" not in st.session_state:
+        st.session_state.modo_novo = False
+
     if st.button("➕ Cadastrar novo veículo"):
         st.session_state.veiculo_dados = {}
         st.session_state.veiculo_confirmado = False
+        st.session_state.modo_novo = True
 
     st.subheader("🔍 Buscar veículos já cadastrados")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
@@ -176,16 +179,11 @@ def tela_veiculos():
     if filtro:
         veiculos = [v for v in veiculos if filtro.lower() in str(v).lower()]
     if veiculos:
-        df_veiculos = pd.DataFrame(veiculos)
-        st.dataframe(df_veiculos, use_container_width=True)
-        st.markdown("### ✏️ Clique em um veículo para editar")
-        indice = st.selectbox(
-            "Selecione um índice:",
-            options=df_veiculos.index,
-            format_func=lambda i: f"{df_veiculos.loc[i, 'Placa']} - {df_veiculos.loc[i, 'Modelo']}"
-        )
-        if indice is not None:
-            selecionado = df_veiculos.loc[indice]
+        df = pd.DataFrame(veiculos)
+        st.dataframe(df, use_container_width=True)
+        indice = st.selectbox("Selecione um veículo:", df.index, format_func=lambda i: f"{df.loc[i, 'Placa']} - {df.loc[i, 'Modelo']}")
+        if indice is not None and not st.session_state.modo_novo:
+            selecionado = df.loc[indice]
             st.session_state.veiculo_dados = {
                 "key": selecionado["Key"],
                 "placa": selecionado["Placa"],
@@ -194,21 +192,14 @@ def tela_veiculos():
                 "cor": selecionado["Cor"],
                 "ano": selecionado["Ano"],
                 "resumo": selecionado["Resumo"],
-                "cpf_cliente": selecionado.get("CPF/CNPJ", ""),
+                "cpf_cliente": selecionado["CPF/CNPJ"],
                 "imagem": get_attachments(selecionado["Key"])
             }
             st.session_state.veiculo_confirmado = True
-            st.info(f"📝 Veículo {selecionado['Placa']} carregado para edição.")
-    else:
-        st.info("Nenhum veículo encontrado.")
+            st.session_state.modo_novo = False
 
     st.divider()
     st.subheader("📥 Cadastro / Edição de Veículo")
-
-    if "veiculo_confirmado" not in st.session_state:
-        st.session_state.veiculo_confirmado = False
-    if "veiculo_dados" not in st.session_state:
-        st.session_state.veiculo_dados = {}
 
     with st.form("form_veiculo"):
         dados = st.session_state.veiculo_dados
@@ -218,68 +209,66 @@ def tela_veiculos():
         marca = st.selectbox("Marca:", marcas, index=marcas.index(dados.get("marca")) if dados.get("marca") in marcas else 0)
         cor = st.text_input("Cor:", value=dados.get("cor", ""))
         ano = st.text_input("Ano:", value=dados.get("ano", ""))
-        cpf_cliente = st.text_input("CPF/CNPJ do Cliente vinculado:", value=dados.get("cpf_cliente", ""))
-        imagem_upload = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
-        imagem = BytesIO(imagem_upload.read()) if imagem_upload else dados.get("imagem")
+        cpf_cliente = st.text_input("CPF/CNPJ do Cliente:", value=dados.get("cpf_cliente", ""))
+        imagem_up = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
+        imagem = BytesIO(imagem_up.read()) if imagem_up else dados.get("imagem")
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
     if confirmar:
-        resumo_abnt = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
+        resumo = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
         st.session_state.veiculo_confirmado = True
+        st.session_state.modo_novo = False
         st.session_state.veiculo_dados = {
-            # Garante que seja sempre novo
-            "key": None,
+            "key": dados.get("key"),
             "placa": placa,
             "modelo": corrige_abnt(modelo),
             "marca": marca,
             "cor": corrige_abnt(cor),
             "ano": ano,
-            "resumo": resumo_abnt,
-            "imagem": imagem,
-            "cpf_cliente": cpf_cliente
+            "resumo": resumo,
+            "cpf_cliente": cpf_cliente,
+            "imagem": imagem
         }
-
         st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
     if st.session_state.veiculo_confirmado:
         dados = st.session_state.veiculo_dados
-        st.markdown("### 📄 Resumo do veículo")
-        st.markdown(f"**Placa:** {dados.get('placa', '')}")
-        st.markdown(f"**Modelo:** {dados.get('modelo', '')}")
-        st.markdown(f"**Marca:** {dados.get('marca', '')}")
-        st.markdown(f"**Cor:** {dados.get('cor', '')}")
-        st.markdown(f"**Ano:** {dados.get('ano', '')}")
-        st.markdown(f"**Resumo (summary):** {dados.get('resumo', '')}")
-        st.markdown(f"**CPF/CNPJ do Cliente:** {dados.get('cpf_cliente', '')}")
+        st.markdown("### 📄 Resumo")
+        st.markdown(f"**Placa:** {dados['placa']}")
+        st.markdown(f"**Modelo:** {dados['modelo']}")
+        st.markdown(f"**Marca:** {dados['marca']}")
+        st.markdown(f"**Cor:** {dados['cor']}")
+        st.markdown(f"**Ano:** {dados['ano']}")
+        st.markdown(f"**Resumo:** {dados['resumo']}")
+        st.markdown(f"**CPF/CNPJ do Cliente:** {dados['cpf_cliente']}")
 
-        dados_cliente = buscar_cliente_por_cpf(dados.get("cpf_cliente", ""))
-        if dados_cliente:
-            st.markdown(f"**👤 Nome do Cliente:** {dados_cliente['nome']}")
-            st.markdown(f"**📞 Telefone:** {dados_cliente['telefone']}")
+        cliente = buscar_cliente_por_cpf(dados["cpf_cliente"])
+        if cliente:
+            st.markdown(f"**👤 Cliente:** {cliente['nome']}")
+            st.markdown(f"**📞 Telefone:** {cliente['telefone']}")
         else:
-            st.warning("Cliente não encontrado no cadastro.")
+            st.warning("Cliente não localizado.")
 
         if dados.get("imagem"):
-            st.image(dados["imagem"], width=200, caption="📸 Foto selecionada")
+            st.image(dados["imagem"], width=200, caption="📸 Foto")
 
         if st.button("🚀 Enviar para o Jira"):
-            with st.spinner("Enviando para o Jira..."):
+            with st.spinner("Enviando..."):
                 if dados.get("key"):
-                    sucesso = atualizar_veiculo(dados["key"], dados)
-                    if sucesso:
-                        st.success(f"✅ Veículo atualizado com sucesso: [{dados['key']}]({JIRA_URL}/browse/{dados['key']})")
+                    ok = atualizar_veiculo(dados["key"], dados)
+                    if ok:
+                        st.success(f"✅ Atualizado: [{dados['key']}]({JIRA_URL}/browse/{dados['key']})")
                     else:
-                        st.error("❌ Falha ao atualizar o veículo.")
+                        st.error("Erro ao atualizar.")
                 else:
-                    issue_key = criar_issue_veiculo(
-                        dados.get("placa"), dados.get("modelo"), dados.get("marca"),
-                        dados.get("cor"), dados.get("ano"), dados.get("resumo"), dados.get("cpf_cliente")
+                    key = criar_issue_veiculo(
+                        dados["placa"], dados["modelo"], dados["marca"],
+                        dados["cor"], dados["ano"], dados["resumo"], dados["cpf_cliente"]
                     )
-                    if issue_key:
+                    if key:
                         if dados.get("imagem"):
-                            sucesso = anexar_foto(issue_key, dados["imagem"])
-                            if not sucesso:
-                                st.warning("⚠️ Veículo criado, mas não foi possível anexar a foto.")
-                        st.success(f"✅ Veículo criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-            st.session_state.veiculo_confirmado = False
+                            anexar_foto(key, dados["imagem"])
+                        st.success(f"✅ Criado: [{key}]({JIRA_URL}/browse/{key})")
             st.session_state.veiculo_dados = {}
+            st.session_state.veiculo_confirmado = False
+            st.session_state.modo_novo = False
