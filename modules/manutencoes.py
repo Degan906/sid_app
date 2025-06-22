@@ -45,12 +45,20 @@ def buscar_veiculos_do_cliente(cpf):
 def obter_foto_veiculo(issue_key):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
     r = requests.get(url, headers=JIRA_HEADERS)
+    
     if r.status_code == 200:
-        attachments = r.json()["fields"].get("attachment", [])
-        for a in attachments:
+        anexos = r.json().get("fields", {}).get("attachment", [])
+        st.markdown("### 🔍 Anexos encontrados:")
+        for a in anexos:
+            st.markdown(f"- Nome: `{a['filename']}`, Tipo MIME: `{a['mimeType']}`")
+        
+        # Buscar o primeiro que for imagem
+        for a in anexos:
             if a.get("mimeType", "").startswith("image"):
-                return a["content"]
+                return a.get("content")
+                
     return None
+
 
 def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, descricao):
     payload = {
