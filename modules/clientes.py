@@ -208,8 +208,14 @@ def tela_busca_edicao_clientes():
                     st.markdown(f"**Empresa:** {fields.get('customfield_10051', '—')}")
                     st.markdown(f"**Telefone:** {fields.get('customfield_10041', '—')}")
                     st.markdown(f"**E-mail:** {fields.get('customfield_10042', '—')}")
-                    if st.button(f"✏️ Editar {key}", key=f"editar_{key}"):
-                        st.session_state.cliente_edicao = {
+                    if f"editar_{key}" not in st.session_state:
+                        st.session_state[f"editar_{key}"] = False
+
+                    if st.button(f"✏️ Editar {key}", key=f"editar_btn_{key}"):
+                        st.session_state[f"editar_{key}"] = True
+
+                    if st.session_state.get(f"editar_{key}", False):
+                        cliente = {
                             "key": key,
                             "nome": nome,
                             "cpf": fields.get("customfield_10040", ""),
@@ -220,7 +226,41 @@ def tela_busca_edicao_clientes():
                             "numero": fields.get("customfield_10139", ""),
                             "complemento": fields.get("customfield_10044", "")
                         }
-                        st.experimental_rerun()
+
+                        st.subheader(f"✏️ Editar Cliente: {cliente['nome']} ({cliente['key']})")
+                        with st.form(f"form_edicao_{key}"):
+                            nome = st.text_input("Nome:", value=cliente["nome"])
+                            cpf = st.text_input("CPF/CNPJ:", value=cliente["cpf"])
+                            empresa = st.text_input("Empresa:", value=cliente["empresa"])
+                            telefone = st.text_input("Telefone:", value=cliente["telefone"])
+                            email = st.text_input("E-mail:", value=cliente["email"])
+                            cep = st.text_input("CEP:", value=cliente["cep"])
+                            numero = st.text_input("Nº:", value=cliente["numero"])
+                            complemento = st.text_input("Complemento:", value=cliente["complemento"])
+                            salvar = st.form_submit_button("💾 Salvar alterações")
+
+                        if salvar:
+                            payload = {
+                                "fields": {
+                                    "summary": nome,
+                                    "customfield_10038": nome,
+                                    "customfield_10040": cpf,
+                                    "customfield_10051": empresa,
+                                    "customfield_10041": telefone,
+                                    "customfield_10042": email,
+                                    "customfield_10133": cep,
+                                    "customfield_10139": numero,
+                                    "customfield_10044": complemento,
+                                }
+                            }
+                            url = f"{JIRA_URL}/rest/api/2/issue/{cliente['key']}"
+                            resp = requests.put(url, headers=JIRA_HEADERS, json=payload)
+                            if resp.status_code == 204:
+                                st.success("✅ Cliente atualizado com sucesso!")
+                                st.session_state[f"editar_{key}"] = False
+                            else:
+                                st.error(f"Erro ao atualizar cliente: {resp.text}")
+
         else:
             st.warning("Nenhum cliente encontrado.")
     else:
