@@ -161,8 +161,51 @@ def anexar_foto(issue_key, imagem):
     return response.status_code == 200
 
 def tela_veiculos():
+    st.set_page_config(page_title="Cadastro de Veículos", layout="wide")
     st.header("🚘 Cadastro de Veículos")
-    marcas = get_marcas()
+
+    # Botão no topo para novo cadastro
+    with st.container():
+        st.markdown(
+            """
+            <div style="background-color: #eef3fb; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <form action="?novo_veiculo=1" method="get">
+                    <button type="submit" style="
+                        background-color: #2c6dd5;
+                        color: white;
+                        padding: 10px 20px;
+                        font-size: 16px;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                    ">➕ Cadastrar novo veículo</button>
+                </form>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # Scroll e destaque no formulário se veio de "novo_veiculo"
+    query_params = st.experimental_get_query_params()
+    if query_params.get("novo_veiculo", ["0"])[0] == "1":
+        st.markdown('<div id="formulario"></div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <style>
+            section[data-testid="stForm"] {
+                border: 2px solid #2c6dd5;
+                padding: 20px;
+                border-radius: 12px;
+                background-color: #f5f9ff;
+                box-shadow: 0 0 5px rgba(0,0,0,0.05);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        st.session_state.veiculo_dados = {}
+        st.session_state.veiculo_confirmado = False
+        st.experimental_set_query_params()
 
     st.subheader("🔍 Buscar veículos já cadastrados")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
@@ -198,6 +241,7 @@ def tela_veiculos():
 
     st.divider()
     st.subheader("📥 Cadastro / Edição de Veículo")
+
     if "veiculo_confirmado" not in st.session_state:
         st.session_state.veiculo_confirmado = False
     if "veiculo_dados" not in st.session_state:
@@ -207,6 +251,7 @@ def tela_veiculos():
         dados = st.session_state.veiculo_dados
         placa = st.text_input("Placa:", value=dados.get("placa", "")).upper()
         modelo = st.text_input("Modelo:", value=dados.get("modelo", ""))
+        marcas = get_marcas()
         marca = st.selectbox("Marca:", marcas, index=marcas.index(dados.get("marca")) if dados.get("marca") in marcas else 0)
         cor = st.text_input("Cor:", value=dados.get("cor", ""))
         ano = st.text_input("Ano:", value=dados.get("ano", ""))
