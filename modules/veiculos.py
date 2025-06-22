@@ -88,7 +88,7 @@ def buscar_veiculos():
     }
     resp = requests.get(url, headers=JIRA_HEADERS, params=params)
     if resp.status_code == 200:
-        issues = resp.json().get("issues", [])
+        issues = response.json().get("issues", [])
         veiculos = []
         for issue in issues:
             fields = issue["fields"]
@@ -164,13 +164,18 @@ def tela_veiculos():
     st.set_page_config(page_title="Cadastro de Veículos", layout="wide")
     st.header("🚘 Cadastro de Veículos")
 
+    # Evita erro de rerun incorreto
+    if st.session_state.get("modo_novo_veiculo"):
+        st.session_state["modo_novo_veiculo"] = False
+        return
+
     if st.button("➕ Cadastrar novo veículo"):
         st.session_state.veiculo_dados = {
             "key": None, "placa": "", "modelo": "", "marca": "", "cor": "", "ano": "",
             "resumo": "", "imagem": None, "cpf_cliente": ""
         }
         st.session_state.veiculo_confirmado = False
-        st.experimental_rerun()
+        st.session_state["modo_novo_veiculo"] = True
 
     st.subheader("🔍 Buscar veículos já cadastrados")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
@@ -199,9 +204,7 @@ def tela_veiculos():
                 "cpf_cliente": selecionado["CPF/CNPJ"]
             }
             st.session_state.veiculo_confirmado = False
-            st.experimental_rerun()
-    else:
-        st.info("Nenhum veículo encontrado.")
+            st.session_state["modo_novo_veiculo"] = True
 
     st.divider()
     st.subheader("📥 Cadastro / Edição de Veículo")
