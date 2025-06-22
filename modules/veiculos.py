@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import base64
@@ -16,12 +17,11 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === FUNÇÕES AUXILIARES ===
 def corrige_abnt(texto):
     texto = texto.strip().lower()
     texto = unicodedata.normalize('NFKD', texto)
     texto = ''.join(c for c in texto if not unicodedata.combining(c))
-    texto = re.sub(r'[^a-zA-Z0-9\\s]', '', texto)
+    texto = re.sub(r'[^a-zA-Z0-9\s]', '', texto)
     texto = ' '.join(word.capitalize() for word in texto.split())
     return texto
 
@@ -49,7 +49,7 @@ def buscar_veiculos():
     url = f"{JIRA_URL}/rest/api/2/search"
     params = {
         "jql": jql,
-        "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138",
+        "fields": "summary,customfield_10134,customfield_10136,customfield_10140,customfield_10137,customfield_10138,customfield_10040",
         "maxResults": 100
     }
     resp = requests.get(url, headers=JIRA_HEADERS, params=params)
@@ -65,7 +65,8 @@ def buscar_veiculos():
                 "Modelo": fields.get("customfield_10136"),
                 "Marca": fields.get("customfield_10140", {}).get("value"),
                 "Cor": fields.get("customfield_10137"),
-                "Ano": fields.get("customfield_10138")
+                "Ano": fields.get("customfield_10138"),
+                "CPF/CNPJ": fields.get("customfield_10040")
             })
         return veiculos
     else:
@@ -116,43 +117,28 @@ def anexar_foto(issue_key, imagem):
         "Authorization": JIRA_HEADERS["Authorization"],
         "X-Atlassian-Token": "no-check"
     }
-    files = { "file": (imagem.name, imagem.getvalue()) }
+    files = { "file": ("veiculo.jpg", imagem.getvalue()) }
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
-def gerar_excel(veiculos):
-    df = pd.DataFrame(veiculos)
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Veículos")
-    buffer.seek(0)
-    return buffer
-
-# === TELA PRINCIPAL ===
 def tela_veiculos():
     st.header("🚘 Cadastro de Veículos")
-
     marcas = get_marcas()
 
-    # Busca
     st.subheader("🔍 Buscar veículos já cadastrados")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
-
     veiculos = buscar_veiculos()
     if filtro:
         veiculos = [v for v in veiculos if filtro.lower() in str(v).lower()]
-
     if veiculos:
         df_veiculos = pd.DataFrame(veiculos)
         st.dataframe(df_veiculos, use_container_width=True)
-
         st.markdown("### ✏️ Clique em um veículo para editar")
         indice = st.selectbox(
             "Selecione um índice:",
             options=df_veiculos.index,
             format_func=lambda i: f"{df_veiculos.loc[i, 'Placa']} - {df_veiculos.loc[i, 'Modelo']}"
         )
-
         if indice is not None:
             selecionado = df_veiculos.loc[indice]
             st.session_state.veiculo_dados = {
@@ -163,7 +149,7 @@ def tela_veiculos():
                 "cor": selecionado["Cor"],
                 "ano": selecionado["Ano"],
                 "resumo": selecionado["Resumo"],
-                "cpf_cliente": "",
+                "cpf_cliente": selecionado.get("CPF/CNPJ", ""),
                 "imagem": None
             }
             st.session_state.veiculo_confirmado = True
@@ -173,7 +159,6 @@ def tela_veiculos():
 
     st.divider()
     st.subheader("📥 Cadastro / Edição de Veículo")
-
     if "veiculo_confirmado" not in st.session_state:
         st.session_state.veiculo_confirmado = False
     if "veiculo_dados" not in st.session_state:
@@ -187,7 +172,8 @@ def tela_veiculos():
         cor = st.text_input("Cor:", value=dados.get("cor", ""))
         ano = st.text_input("Ano:", value=dados.get("ano", ""))
         cpf_cliente = st.text_input("CPF/CNPJ do Cliente vinculado:", value=dados.get("cpf_cliente", ""))
-        imagem = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
+        imagem_upload = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
+        imagem = BytesIO(imagem_upload.read()) if imagem_upload else None
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
     if confirmar:
@@ -238,5 +224,5 @@ def tela_veiculos():
                             if not sucesso:
                                 st.warning("⚠️ Veículo criado, mas não foi possível anexar a foto.")
                         st.success(f"✅ Veículo criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-                st.session_state.veiculo_confirmado = False
-                st.session_state.veiculo_dados = {}
+            st.session_state.veiculo_confirmado = False
+            st.session_state.veiculo_dados = {}
