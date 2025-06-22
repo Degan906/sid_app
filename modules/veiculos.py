@@ -17,6 +17,19 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
+def get_attachments(issue_key):
+    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
+    response = requests.get(url, headers=JIRA_HEADERS)
+    if response.status_code == 200:
+        attachments = response.json()["fields"].get("attachment", [])
+        if attachments:
+            first = attachments[0]
+            image_url = first["content"]
+            image_resp = requests.get(image_url, headers=JIRA_HEADERS)
+            if image_resp.status_code == 200:
+                return BytesIO(image_resp.content)
+    return None
+
 def corrige_abnt(texto):
     texto = texto.strip().lower()
     texto = unicodedata.normalize('NFKD', texto)
@@ -150,7 +163,7 @@ def tela_veiculos():
                 "ano": selecionado["Ano"],
                 "resumo": selecionado["Resumo"],
                 "cpf_cliente": selecionado.get("CPF/CNPJ", ""),
-                "imagem": None
+                "imagem": get_attachments(selecionado["Key"])
             }
             st.session_state.veiculo_confirmado = True
             st.info(f"📝 Veículo {selecionado['Placa']} carregado para edição.")
@@ -173,7 +186,7 @@ def tela_veiculos():
         ano = st.text_input("Ano:", value=dados.get("ano", ""))
         cpf_cliente = st.text_input("CPF/CNPJ do Cliente vinculado:", value=dados.get("cpf_cliente", ""))
         imagem_upload = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
-        imagem = BytesIO(imagem_upload.read()) if imagem_upload else None
+        imagem = BytesIO(imagem_upload.read()) if imagem_upload else dados.get("imagem")
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
     if confirmar:
