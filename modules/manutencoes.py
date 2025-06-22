@@ -61,27 +61,24 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
     payload = {
         "fields": {
             "project": {"key": "MC"},
-            "issuetype": {"id": "10031"},
+            "issuetype": {"id": "10030"},  # Sempre tipo 'Serviços'
             "parent": {"key": os_key},
-            "summary": f"{tipo} - {descricao}",
-            "description": f"{descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
+            "summary": descricao,
+            "description": f"Tipo: {tipo}\nDescrição: {descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
     if r.status_code != 201:
         st.error(f"Erro ao adicionar subtarefa: {r.status_code} - {r.text}")
-        return False
-    return True
+    return r.status_code == 201
 
-# === TELA DE MANUTENÇÕES ===
+# === TELA DE MANUTENÇÃO ===
 def tela_manutencoes():
-    st.markdown("## 🛠️ Abertura de Ordem de Serviço (OS)")
+    st.title("\U0001F698 SID - Sistema de Manutenção de Veículos")
+    st.header("\U0001F6E0️ Abertura de Ordem de Serviço (OS)")
 
-    if "os_ativa" not in st.session_state:
-        st.session_state.os_ativa = None
-
-    if not st.session_state.os_ativa:
-        st.subheader("👤 Selecionar Cliente")
+    if "os_key" not in st.session_state:
+        st.subheader("\U0001F464 Selecionar Cliente")
         clientes = buscar_clientes()
         nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
         cliente_index = st.selectbox("Buscar por CPF ou Tel", nomes)
@@ -92,7 +89,7 @@ def tela_manutencoes():
 
         st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
-        st.subheader("🚗 Selecionar Veículo")
+        st.subheader("\U0001F697 Selecionar Veículo")
         veiculos = buscar_veiculos_do_cliente(cpf)
         if not veiculos:
             st.warning("Este cliente não possui veículos cadastrados.")
@@ -103,11 +100,12 @@ def tela_manutencoes():
         veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
         veiculo_key = veiculo_info["key"]
 
-        st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
-        st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
-        st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
+        st.markdown(f"**\U0001F511 ID no Jira:** {veiculo_key}")
+        st.markdown(f"**\U0001F697 Identificação:** {veiculo_info['fields'].get('summary')}")
+        st.markdown(f"**\U0001F4CD Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-        st.subheader("📋 Detalhes da OS")
+        # Formulário da OS
+        st.subheader("\U0001F4CB Detalhes da OS")
         km = st.text_input("Quilometragem atual do veículo (KM):")
         data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
         data_saida = st.date_input("Data Prevista de Saída", value=datetime.date.today())
@@ -116,47 +114,33 @@ def tela_manutencoes():
         if st.button("✅ Criar Ordem de Serviço"):
             os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
             if os_key:
-                st.session_state.os_ativa = {
-                    "key": os_key,
-                    "cliente": nome_cliente,
-                    "cpf": cpf,
-                    "veiculo": veiculo_info['fields'].get('summary')
-                }
-                st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
+                st.session_state.os_key = os_key
                 st.rerun()
-
     else:
-        os_key = st.session_state.os_ativa["key"]
-        st.markdown(f"### 📌 OS em andamento: {os_key}")
-        st.markdown(f"**Cliente:** {st.session_state.os_ativa['cliente']} ({st.session_state.os_ativa['cpf']})")
-        st.markdown(f"**Veículo:** {st.session_state.os_ativa['veiculo']} ({os_key})")
+        os_key = st.session_state.os_key
+        st.subheader(f"\U0001F4CC OS em andamento: {os_key}")
+        st.markdown("### \U0001F4DD Adicionar Serviços ou Peças")
 
-        st.subheader("🧾 Adicionar Serviços ou Peças")
-        with st.form(key="form_sub"):
-            col1, col2 = st.columns(2)
-            with col1:
-                tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
-                descricao_sub = st.text_input("Descrição do item")
-            with col2:
-                quantidade = st.number_input("Quantidade", min_value=1, step=1)
-                valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
+            descricao = st.text_input("Descrição do item")
+        with col2:
+            quantidade = st.number_input("Quantidade", min_value=1, step=1)
+            valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
 
-            enviar = st.form_submit_button("➕ Adicionar Subtarefa")
-            if enviar:
-                sucesso = criar_subtarefa(os_key, descricao_sub, tipo, quantidade, valor)
-                if sucesso:
-                    st.success("Subtarefa adicionada com sucesso.")
-                else:
-                    st.error("Erro ao adicionar subtarefa.")
+        if st.button("➕ Adicionar Subtarefa"):
+            sucesso = criar_subtarefa(os_key, descricao, tipo, quantidade, valor)
+            if sucesso:
+                st.success("Subtarefa adicionada com sucesso.")
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Finalizar OS"):
-                st.session_state.os_ativa = None
-                st.success("OS finalizada com sucesso.")
+                del st.session_state.os_key
+                st.success("OS finalizada. Pronta para nova abertura.")
                 st.rerun()
-
         with col2:
             if st.button("➕ Nova OS"):
-                st.session_state.os_ativa = None
+                del st.session_state.os_key
                 st.rerun()
