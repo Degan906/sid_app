@@ -38,7 +38,7 @@ def criar_issue_veiculo(placa, modelo, marca, cor, ano, resumo):
     payload = {
         "fields": {
             "project": {"key": "MC"},
-            "issuetype": { "name":"Veículo" },
+            "issuetype": { "id": "10031" },
             "summary": resumo,
             "customfield_10134": placa,
             "customfield_10136": modelo,
