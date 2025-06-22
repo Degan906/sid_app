@@ -46,7 +46,7 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
     payload = {
         "fields": {
             "project": {"key": "MC"},
-            "issuetype": {"id": "10030"},
+            "issuetype": {"id": "10032"},
             "summary": f"OS - {cliente_nome} ({cliente_cpf}) - {veiculo_key}",
             "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}"
         }
