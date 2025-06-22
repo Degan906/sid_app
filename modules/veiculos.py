@@ -227,7 +227,8 @@ def tela_veiculos():
         resumo_abnt = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
         st.session_state.veiculo_confirmado = True
         st.session_state.veiculo_dados = {
-            "key": dados.get("key", None),
+            # Garante que seja sempre novo
+            "key": None,
             "placa": placa,
             "modelo": corrige_abnt(modelo),
             "marca": marca,
@@ -237,6 +238,7 @@ def tela_veiculos():
             "imagem": imagem,
             "cpf_cliente": cpf_cliente
         }
+
         st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
     if st.session_state.veiculo_confirmado:
