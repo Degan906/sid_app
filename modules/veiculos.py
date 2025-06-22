@@ -3,7 +3,6 @@ import requests
 import base64
 import unicodedata
 import re
-import pandas as pd
 from io import BytesIO
 
 # === CONFIGURAÇÕES JIRA ===
@@ -91,7 +90,7 @@ def tela_veiculos():
     st.header("🚘 Cadastro de Veículos")
 
     marcas = get_marcas()
-    st.write("✅ Marcas disponíveis:", marcas)  # ← linha temporária para verificação
+    st.write("✅ Marcas disponíveis:", marcas)
 
     if "veiculo_confirmado" not in st.session_state:
         st.session_state.veiculo_confirmado = False
@@ -104,13 +103,12 @@ def tela_veiculos():
         marca = st.selectbox("Marca:", marcas) if marcas else st.text_input("Marca:")
         cor = st.text_input("Cor:")
         ano = st.text_input("Ano:")
-        resumo = st.text_input("Identificação (nome resumido):")
         cpf_cliente = st.text_input("CPF/CNPJ do Cliente vinculado:")
         imagem = st.file_uploader("Foto do veículo:", type=["jpg", "jpeg", "png"])
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
     if confirmar:
-        resumo_abnt = corrige_abnt(resumo)
+        resumo_abnt = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
         st.session_state.veiculo_confirmado = True
         st.session_state.veiculo_dados = {
             "placa": placa,
@@ -132,22 +130,19 @@ def tela_veiculos():
         st.markdown(f"**Marca:** {dados.get('marca', '')}")
         st.markdown(f"**Cor:** {dados.get('cor', '')}")
         st.markdown(f"**Ano:** {dados.get('ano', '')}")
-        st.markdown(f"**Identificação:** {dados.get('resumo', '')}")
+        st.markdown(f"**Resumo automático (summary):** {dados.get('resumo', '')}")
         st.markdown(f"**CPF/CNPJ do Cliente:** {dados.get('cpf_cliente', '')}")
-
-
-
-        if dados["imagem"]:
+        if dados.get("imagem"):
             st.image(dados["imagem"], width=200, caption="📸 Foto selecionada")
 
         if st.button("🚀 Enviar para o Jira"):
             with st.spinner("Enviando para o Jira..."):
                 issue_key = criar_issue_veiculo(
-                    dados["placa"], dados["modelo"], dados["marca"],
-                    dados["cor"], dados["ano"], dados["resumo"], dados["cpf_cliente"]
+                    dados.get("placa"), dados.get("modelo"), dados.get("marca"),
+                    dados.get("cor"), dados.get("ano"), dados.get("resumo"), dados.get("cpf_cliente")
                 )
                 if issue_key:
-                    if dados["imagem"]:
+                    if dados.get("imagem"):
                         sucesso = anexar_foto(issue_key, dados["imagem"])
                         if not sucesso:
                             st.warning("⚠️ Veículo criado, mas não foi possível anexar a foto.")
