@@ -116,11 +116,12 @@ def tela_manutencoes():
         if st.button("✅ Criar Ordem de Serviço"):
             os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
             if os_key:
-                st.success(f"Ordem de Serviço criada com sucesso! ID: {os_key}")
                 st.session_state.os_criada = os_key
                 st.session_state.cliente = {"nome": nome_cliente, "cpf": cpf}
                 st.session_state.veiculo_key = veiculo_key
                 st.session_state.veiculo_desc = veiculo_info['fields'].get('summary')
+                st.experimental_rerun()
+
     else:
         os_key = st.session_state.os_criada
         st.subheader(f"📌 OS em andamento: {os_key}")
