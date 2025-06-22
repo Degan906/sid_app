@@ -59,7 +59,6 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
     st.error(f"Erro ao criar OS: {r.status_code} - {r.text}")
     return None
 
-
 def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
     payload = {
         "fields": {
@@ -67,7 +66,7 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
             "issuetype": {"id": "10031"},
             "parent": {"key": os_key},
             "summary": f"{tipo} - {descricao}",
-            "description": f"{descricao}\nQuantidade: {quantidade}\nValor: R${valor}" 
+            "description": f"{descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
@@ -81,7 +80,7 @@ def tela_manutencoes():
     st.subheader("👤 Selecionar Cliente")
     clientes = buscar_clientes()
     nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
-    cliente_index = st.selectbox("Buscar por CPF ou Tel", nomes, index=0)
+    cliente_index = st.selectbox("Buscar por CPF ou Tel", nomes)
     cliente_escolhido = clientes[nomes.index(cliente_index)]
     cpf = cliente_escolhido['fields'].get('customfield_10040')
     nome_cliente = cliente_escolhido['fields'].get('summary')
