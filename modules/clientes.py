@@ -3,6 +3,8 @@ import requests
 import unicodedata
 import re
 import base64
+import pandas as pd  # ← ADICIONE ESTA LINHA
+
 
 # === CONFIGURAÇÕES DO JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
