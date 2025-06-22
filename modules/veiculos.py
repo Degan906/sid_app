@@ -223,65 +223,33 @@ def main():
             console.print(table)
         elif choice == "5":
             project_key = input("Digite a chave do projeto (ex: AP): ").strip()
-            console.print("\n[bold cyan]Escolha uma subopção:[/bold cyan]")
-            console.print("1 - Ver tipos de issue disponíveis para o projeto")
-            console.print("2 - Ver campos de um tipo específico")
-
-            subopt = input("Digite 1 ou 2: ").strip()
-            if subopt == "1":
-                url = f"{JIRA_URL.replace('/rest/api/2', '')}/rest/api/2/issue/createmeta"
-                headers = {"Accept": "application/json"}
-                auth = HTTPBasicAuth(JIRA_USERNAME, JIRA_API_TOKEN)
-                params = {
-                    "projectKeys": project_key,
-                    "expand": "projects.issuetypes"
-                }
-                try:
-                    response = requests.get(url, headers=headers, auth=auth, params=params)
-                    response.raise_for_status()
-                    data = response.json()
-                    issue_types = []
-                    for project in data.get("projects", []):
-                        for issuetype in project.get("issuetypes", []):
-                            issue_types.append({
-                                "id": issuetype.get("id"),
-                                "name": issuetype.get("name"),
-                                "description": issuetype.get("description", "—")
-                            })
-                    if issue_types:
-                        table = Table(title=f"Tipos de Issue do Projeto {project_key}", box=box.ROUNDED)
-                        table.add_column("ID", style="cyan")
-                        table.add_column("Nome", style="green")
-                        table.add_column("Descrição", style="yellow")
-                        for it in issue_types:
-                            table.add_row(it["id"], it["name"], it["description"])
-                        console.print(table)
-                    else:
-                        console.print("[yellow]⚠️ Nenhum tipo de issue encontrado para este projeto.[/yellow]")
-                except Exception as e:
-                    console.print(f"[red]Erro ao buscar tipos de issue: {e}[/red]")
-
-            elif subopt == "2":
-                issue_type = input("Digite o nome do tipo de issue (ex: Tarefa): ").strip()
-                campos = get_fields_by_project_and_issuetype(project_key, issue_type)
-                if campos:
-                    table = Table(title=f"Campos para {project_key} - {issue_type}", box=box.ROUNDED)
-                    table.add_column("Nº", justify="center")
-                    table.add_column("ID", style="cyan")
-                    table.add_column("Nome", style="green")
-                    table.add_column("Tipo", style="yellow")
-                    table.add_column("Obrigatório", justify="center")
-                    for idx, campo in enumerate(campos, 1):
-                        table.add_row(
-                            str(idx),
-                            campo["id"],
-                            campo["name"],
-                            campo["type"],
-                            "✅" if campo["required"] else "❌"
-                        )
-                    console.print(table)
-                else:
-                    console.print("[yellow]⚠️ Nenhum campo retornado para esse projeto e tipo de issue.[/yellow]")
+            issue_type = input("Digite o nome do tipo de issue (ex: Tarefa): ").strip()
+            campos = get_fields_by_project_and_issuetype(project_key, issue_type)
+            if campos:
+                table = Table(title=f"Campos para {project_key} - {issue_type}", box=box.ROUNDED)
+                table.add_column("Nº", justify="center")
+                table.add_column("ID", style="cyan")
+                table.add_column("Nome", style="green")
+                table.add_column("Tipo", style="yellow")
+                table.add_column("Obrigatório", justify="center")
+                for idx, campo in enumerate(campos, 1):
+                    table.add_row(
+                        str(idx),
+                        campo["id"],
+                        campo["name"],
+                        campo["type"],
+                        "✅" if campo["required"] else "❌"
+                    )
+                console.print(table)
             else:
-                console.print("[red]Subopção inválida![/red]")
+                console.print("[yellow]⚠️ Nenhum campo retornado para esse projeto e tipo de issue.[/yellow]")
+        else:
+            console.print("[red]Opção inválida![/red]")
+            continue
+        repetir = input("\nDeseja realizar outra consulta? (S/N): ").strip().lower()
+        if repetir != "s":
+            break
+    console.print("[bold green]👋 Obrigado por usar o gerenciador de campos do Jira![/bold green]")
 
+if __name__ == "__main__":
+    main()
