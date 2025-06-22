@@ -89,36 +89,36 @@ def tela_manutencoes():
     st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
     # Selecionar Veículo
-st.subheader("🚗 Selecionar Veículo")
-veiculos = buscar_veiculos_do_cliente(cpf)
-if not veiculos:
-    st.warning("Este cliente não possui veículos cadastrados.")
-    return
+    st.subheader("🚗 Selecionar Veículo")
+    veiculos = buscar_veiculos_do_cliente(cpf)
+    if not veiculos:
+        st.warning("Este cliente não possui veículos cadastrados.")
+        return
 
-veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
-veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
-veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
-veiculo_key = veiculo_info["key"]
+    veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
+    veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
+    veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
+    veiculo_key = veiculo_info["key"]
 
-# Mostrar dados do veículo
-st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
-st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
-st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
+    # Mostrar dados do veículo
+    st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
+    st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
+    st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-# Buscar imagem (anexo)
-def obter_foto_veiculo(issue_key):
-    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
-    r = requests.get(url, headers=JIRA_HEADERS)
-    if r.status_code == 200:
-        attachments = r.json()["fields"].get("attachment", [])
-        for a in attachments:
-            if a["mimeType"].startswith("image"):
-                return a["content"]
-    return None
+    # Buscar imagem (anexo)
+    def obter_foto_veiculo(issue_key):
+        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
+        r = requests.get(url, headers=JIRA_HEADERS)
+        if r.status_code == 200:
+            attachments = r.json()["fields"].get("attachment", [])
+            for a in attachments:
+                if a["mimeType"].startswith("image"):
+                    return a["content"]
+        return None
 
-foto_url = obter_foto_veiculo(veiculo_key)
-if foto_url:
-    st.image(foto_url, width=300, caption="📸 Foto do Veículo")
-else:
-    st.info("Nenhuma imagem encontrada para este veículo.")
+    foto_url = obter_foto_veiculo(veiculo_key)
+    if foto_url:
+        st.image(foto_url, width=300, caption="📸 Foto do Veículo")
+    else:
+        st.info("Nenhuma imagem encontrada para este veículo.")
 
