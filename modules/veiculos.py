@@ -8,7 +8,7 @@ from io import BytesIO
 import pandas as pd
 
 # === CONFIGURAÇÕES JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_URL = "https://hcdconsultoria.atlassian.net" 
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 JIRA_HEADERS = {
@@ -149,23 +149,62 @@ def tela_veiculos():
     st.set_page_config(page_title="Cadastro de Veículos", layout="wide")
     st.header("🚘 Cadastro de Veículos")
 
+    # Inicializa variáveis de estado
     if "veiculo_dados" not in st.session_state:
         st.session_state.veiculo_dados = {}
     if "veiculo_confirmado" not in st.session_state:
         st.session_state.veiculo_confirmado = False
     if "modo_novo" not in st.session_state:
         st.session_state.modo_novo = False
+    if "mostrar_popup" not in st.session_state:
+        st.session_state.mostrar_popup = False
 
+    # Botão para abrir o popup de cadastro de novo veículo
     if st.button("➕ Cadastrar novo veículo"):
+        st.session_state.mostrar_popup = True
         st.session_state.veiculo_dados = {}
         st.session_state.veiculo_confirmado = False
         st.session_state.modo_novo = True
 
+    # Popup/modal para cadastro de novo veículo
+    if st.session_state.mostrar_popup:
+        with st.expander("📝 Cadastrar Novo Veículo", expanded=True):
+            with st.form("form_novo_veiculo"):
+                placa = st.text_input("Placa").upper()
+                modelo = st.text_input("Modelo")
+                marcas = get_marcas()
+                marca = st.selectbox("Marca", marcas)
+                cor = st.text_input("Cor")
+                ano = st.text_input("Ano")
+                cpf = st.text_input("CPF/CNPJ do Cliente")
+                img_up = st.file_uploader("Foto do veículo", type=["jpg", "jpeg", "png"])
+                imagem = BytesIO(img_up.read()) if img_up else None
+                confirmar = st.form_submit_button("✅ Confirmar Dados")
+
+            if confirmar:
+                resumo = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
+                st.session_state.veiculo_dados = {
+                    "placa": placa,
+                    "modelo": corrige_abnt(modelo),
+                    "marca": marca,
+                    "cor": corrige_abnt(cor),
+                    "ano": ano,
+                    "resumo": resumo,
+                    "cpf_cliente": cpf,
+                    "imagem": imagem
+                }
+                st.session_state.veiculo_confirmado = True
+                st.session_state.modo_novo = True
+                st.session_state.mostrar_popup = False
+                st.success("✅ Dados confirmados!")
+
+    # Consulta de veículos
     st.subheader("🔍 Buscar veículos")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
     veiculos = buscar_veiculos()
     if filtro:
         veiculos = [v for v in veiculos if filtro.lower() in str(v).lower()]
+
     if veiculos:
         df = pd.DataFrame(veiculos)
         st.dataframe(df, use_container_width=True)
@@ -191,49 +230,34 @@ def tela_veiculos():
         st.info("Nenhum veículo encontrado.")
 
     st.divider()
-    st.subheader("📥 Cadastro / Edição")
 
-    with st.form("form_veiculo"):
+    # Exibir detalhes do veículo selecionado
+    if st.session_state.veiculo_dados:
         dados = st.session_state.veiculo_dados
-        placa = st.text_input("Placa", value=dados.get("placa", "")).upper()
-        modelo = st.text_input("Modelo", value=dados.get("modelo", ""))
-        marcas = get_marcas()
-        marca = st.selectbox("Marca", marcas, index=marcas.index(dados.get("marca")) if dados.get("marca") in marcas else 0)
-        cor = st.text_input("Cor", value=dados.get("cor", ""))
-        ano = st.text_input("Ano", value=dados.get("ano", ""))
-        cpf = st.text_input("CPF/CNPJ do Cliente", value=dados.get("cpf_cliente", ""))
-        img_up = st.file_uploader("Foto do veículo", type=["jpg", "jpeg", "png"])
-        imagem = BytesIO(img_up.read()) if img_up else dados.get("imagem")
-        confirmar = st.form_submit_button("✅ Confirmar Dados")
-
-    if confirmar:
-        resumo = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
-        st.session_state.veiculo_dados = {
-            "key": dados.get("key"),
-            "placa": placa,
-            "modelo": corrige_abnt(modelo),
-            "marca": marca,
-            "cor": corrige_abnt(cor),
-            "ano": ano,
-            "resumo": resumo,
-            "cpf_cliente": cpf,
-            "imagem": imagem
-        }
-        st.session_state.veiculo_confirmado = True
-        st.session_state.modo_novo = False
-        st.success("✅ Dados confirmados!")
-
-    if st.session_state.veiculo_confirmado:
-        dados = st.session_state.veiculo_dados
+        st.subheader("📋 Detalhes do Veículo")
         st.markdown(f"**Resumo:** {dados['resumo']}")
-        st.markdown(f"**Placa:** {dados['placa']}  \n**Marca:** {dados['marca']}  \n**Modelo:** {dados['modelo']}")
-        st.markdown(f"**Cor:** {dados['cor']}  \n**Ano:** {dados['ano']}  \n**CPF:** {dados['cpf_cliente']}")
+        st.markdown(f"**Placa:** {dados['placa']}  
+**Marca:** {dados['marca']}  
+**Modelo:** {dados['modelo']}")
+        st.markdown(f"**Cor:** {dados['cor']}  
+**Ano:** {dados['ano']}  
+**CPF:** {dados['cpf_cliente']}")
+        
+        # Exibir dados do cliente
         cliente = buscar_cliente_por_cpf(dados["cpf_cliente"])
         if cliente:
-            st.markdown(f"**👤 Cliente:** {cliente['nome']}  \n📞 {cliente['telefone']}")
-        if dados.get("imagem"):
-            st.image(dados["imagem"], width=200)
+            st.markdown(f"**👤 Cliente:** {cliente['nome']}  
+📞 {cliente['telefone']}")
+        else:
+            st.warning("⚠️ Cliente não encontrado.")
 
+        # Exibir foto do veículo
+        if dados.get("imagem"):
+            st.image(dados["imagem"], caption="Foto do veículo", width=300)
+        else:
+            st.info("📷 Nenhuma foto disponível para este veículo.")
+
+        # Botão para enviar/atualizar no Jira
         if st.button("🚀 Enviar para o Jira"):
             with st.spinner("Enviando..."):
                 if dados.get("key"):
