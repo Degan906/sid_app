@@ -238,8 +238,15 @@ def tela_busca_edicao_clientes():
                             if anexos:
                                 foto_url = anexos[0]["content"]
 
+                        from io import BytesIO
+
                         if foto_url:
-                            st.image(foto_url, width=200, caption="📸 Foto atual do cliente")
+                            resp_img = requests.get(foto_url, headers=JIRA_HEADERS)
+                            if resp_img.status_code == 200:
+                                st.image(BytesIO(resp_img.content), width=200, caption="📸 Foto atual do cliente")
+                            else:
+                                st.warning("⚠️ Não foi possível carregar a foto do cliente.")
+
 
                         st.subheader(f"✏️ Editar Cliente: {cliente['nome']} ({cliente['key']})")
                         with st.form(f"form_edicao_{key}"):
