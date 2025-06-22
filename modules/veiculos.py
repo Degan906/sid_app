@@ -146,11 +146,13 @@ def tela_veiculos():
         df_veiculos = pd.DataFrame(veiculos)
         st.dataframe(df_veiculos, use_container_width=True)
 
-        buffer = gerar_excel(veiculos)
-        st.download_button("📤 Exportar para Excel", buffer, file_name="veiculos.xlsx")
-
         st.markdown("### ✏️ Clique em um veículo para editar")
-        indice = st.selectbox("Selecione um índice:", options=df_veiculos.index, format_func=lambda i: f"{df_veiculos.loc[i, 'Placa']} - {df_veiculos.loc[i, 'Modelo']}")
+        indice = st.selectbox(
+            "Selecione um índice:",
+            options=df_veiculos.index,
+            format_func=lambda i: f"{df_veiculos.loc[i, 'Placa']} - {df_veiculos.loc[i, 'Modelo']}"
+        )
+
         if indice is not None:
             selecionado = df_veiculos.loc[indice]
             st.session_state.veiculo_dados = {
