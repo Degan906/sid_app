@@ -48,9 +48,7 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
             "project": {"key": "MC"},
             "issuetype": {"id": "10030"},
             "summary": f"OS - {cliente_nome} ({cliente_cpf}) - {veiculo_key}",
-            "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}",
-            "customfield_10065": data_entrada,
-            "customfield_10066": data_saida
+            "description": f"CPF: {cliente_cpf}\nPlaca: {veiculo_key}\nKM: {km}\n\nDescrição:\n{descricao}"
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
