@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -165,10 +164,13 @@ def tela_veiculos():
     st.set_page_config(page_title="Cadastro de Veículos", layout="wide")
     st.header("🚘 Cadastro de Veículos")
 
-    # Botão simples para novo cadastro
     if st.button("➕ Cadastrar novo veículo"):
-        st.session_state.veiculo_dados = {}
+        st.session_state.veiculo_dados = {
+            "key": None, "placa": "", "modelo": "", "marca": "", "cor": "", "ano": "",
+            "resumo": "", "imagem": None, "cpf_cliente": ""
+        }
         st.session_state.veiculo_confirmado = False
+        st.experimental_rerun()
 
     st.subheader("🔍 Buscar veículos já cadastrados")
     filtro = st.text_input("Buscar por placa, modelo, marca ou cor:")
@@ -178,9 +180,8 @@ def tela_veiculos():
     if veiculos:
         df_veiculos = pd.DataFrame(veiculos)
         st.dataframe(df_veiculos, use_container_width=True)
-        st.markdown("### ✏️ Clique em um veículo para editar")
         indice = st.selectbox(
-            "Selecione um índice:",
+            "Selecione um veículo para editar:",
             options=df_veiculos.index,
             format_func=lambda i: f"{df_veiculos.loc[i, 'Placa']} - {df_veiculos.loc[i, 'Modelo']}"
         )
@@ -194,27 +195,22 @@ def tela_veiculos():
                 "cor": selecionado["Cor"],
                 "ano": selecionado["Ano"],
                 "resumo": selecionado["Resumo"],
-                "cpf_cliente": selecionado.get("CPF/CNPJ", ""),
-                "imagem": get_attachments(selecionado["Key"])
+                "imagem": get_attachments(selecionado["Key"]),
+                "cpf_cliente": selecionado["CPF/CNPJ"]
             }
-            st.session_state.veiculo_confirmado = True
-            st.info(f"📝 Veículo {selecionado['Placa']} carregado para edição.")
+            st.session_state.veiculo_confirmado = False
+            st.experimental_rerun()
     else:
         st.info("Nenhum veículo encontrado.")
 
     st.divider()
     st.subheader("📥 Cadastro / Edição de Veículo")
 
-    if "veiculo_confirmado" not in st.session_state:
-        st.session_state.veiculo_confirmado = False
-    if "veiculo_dados" not in st.session_state:
-        st.session_state.veiculo_dados = {}
-
+    dados = st.session_state.get("veiculo_dados", {})
+    marcas = get_marcas()
     with st.form("form_veiculo"):
-        dados = st.session_state.veiculo_dados
         placa = st.text_input("Placa:", value=dados.get("placa", "")).upper()
         modelo = st.text_input("Modelo:", value=dados.get("modelo", ""))
-        marcas = get_marcas()
         marca = st.selectbox("Marca:", marcas, index=marcas.index(dados.get("marca")) if dados.get("marca") in marcas else 0)
         cor = st.text_input("Cor:", value=dados.get("cor", ""))
         ano = st.text_input("Ano:", value=dados.get("ano", ""))
@@ -227,8 +223,7 @@ def tela_veiculos():
         resumo_abnt = f"{corrige_abnt(marca)} / {corrige_abnt(modelo)} / {corrige_abnt(cor)} / {placa}"
         st.session_state.veiculo_confirmado = True
         st.session_state.veiculo_dados = {
-            # Garante que seja sempre novo
-            "key": None,
+            "key": dados.get("key"),
             "placa": placa,
             "modelo": corrige_abnt(modelo),
             "marca": marca,
@@ -237,22 +232,21 @@ def tela_veiculos():
             "resumo": resumo_abnt,
             "imagem": imagem,
             "cpf_cliente": cpf_cliente
-    }
-
+        }
         st.success("✅ Dados confirmados! Verifique abaixo antes de enviar.")
 
-    if st.session_state.veiculo_confirmado:
+    if st.session_state.get("veiculo_confirmado"):
         dados = st.session_state.veiculo_dados
         st.markdown("### 📄 Resumo do veículo")
-        st.markdown(f"**Placa:** {dados.get('placa', '')}")
-        st.markdown(f"**Modelo:** {dados.get('modelo', '')}")
-        st.markdown(f"**Marca:** {dados.get('marca', '')}")
-        st.markdown(f"**Cor:** {dados.get('cor', '')}")
-        st.markdown(f"**Ano:** {dados.get('ano', '')}")
-        st.markdown(f"**Resumo (summary):** {dados.get('resumo', '')}")
-        st.markdown(f"**CPF/CNPJ do Cliente:** {dados.get('cpf_cliente', '')}")
+        st.markdown(f"**Placa:** {dados['placa']}")
+        st.markdown(f"**Modelo:** {dados['modelo']}")
+        st.markdown(f"**Marca:** {dados['marca']}")
+        st.markdown(f"**Cor:** {dados['cor']}")
+        st.markdown(f"**Ano:** {dados['ano']}")
+        st.markdown(f"**Resumo:** {dados['resumo']}")
+        st.markdown(f"**CPF/CNPJ do Cliente:** {dados['cpf_cliente']}")
 
-        dados_cliente = buscar_cliente_por_cpf(dados.get("cpf_cliente", ""))
+        dados_cliente = buscar_cliente_por_cpf(dados['cpf_cliente'])
         if dados_cliente:
             st.markdown(f"**👤 Nome do Cliente:** {dados_cliente['nome']}")
             st.markdown(f"**📞 Telefone:** {dados_cliente['telefone']}")
@@ -264,7 +258,7 @@ def tela_veiculos():
 
         if st.button("🚀 Enviar para o Jira"):
             with st.spinner("Enviando para o Jira..."):
-                if dados.get("key"):
+                if dados["key"]:
                     sucesso = atualizar_veiculo(dados["key"], dados)
                     if sucesso:
                         st.success(f"✅ Veículo atualizado com sucesso: [{dados['key']}]({JIRA_URL}/browse/{dados['key']})")
@@ -272,8 +266,8 @@ def tela_veiculos():
                         st.error("❌ Falha ao atualizar o veículo.")
                 else:
                     issue_key = criar_issue_veiculo(
-                        dados.get("placa"), dados.get("modelo"), dados.get("marca"),
-                        dados.get("cor"), dados.get("ano"), dados.get("resumo"), dados.get("cpf_cliente")
+                        dados["placa"], dados["modelo"], dados["marca"],
+                        dados["cor"], dados["ano"], dados["resumo"], dados["cpf_cliente"]
                     )
                     if issue_key:
                         if dados.get("imagem"):
