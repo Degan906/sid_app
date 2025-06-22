@@ -127,13 +127,16 @@ def tela_veiculos():
     if st.session_state.veiculo_confirmado:
         dados = st.session_state.veiculo_dados
         st.markdown("### 📄 Resumo do cadastro do veículo")
-        st.markdown(f"**Placa:** {dados['placa']}")
-        st.markdown(f"**Modelo:** {dados['modelo']}")
-        st.markdown(f"**Marca:** {dados['marca']}")
-        st.markdown(f"**Cor:** {dados['cor']}")
-        st.markdown(f"**Ano:** {dados['ano']}")
-        st.markdown(f"**Identificação:** {dados['resumo']}")
-        st.markdown(f"**CPF/CNPJ do Cliente:** {dados['cpf_cliente']}")
+        st.markdown(f"**Placa:** {dados.get('placa', '')}")
+        st.markdown(f"**Modelo:** {dados.get('modelo', '')}")
+        st.markdown(f"**Marca:** {dados.get('marca', '')}")
+        st.markdown(f"**Cor:** {dados.get('cor', '')}")
+        st.markdown(f"**Ano:** {dados.get('ano', '')}")
+        st.markdown(f"**Identificação:** {dados.get('resumo', '')}")
+        st.markdown(f"**CPF/CNPJ do Cliente:** {dados.get('cpf_cliente', '')}")
+
+
+
         if dados["imagem"]:
             st.image(dados["imagem"], width=200, caption="📸 Foto selecionada")
 
