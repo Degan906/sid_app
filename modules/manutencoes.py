@@ -89,49 +89,36 @@ def tela_manutencoes():
     st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
     # Selecionar Veículo
-    st.subheader("🚗 Selecionar Veículo")
-    veiculos = buscar_veiculos_do_cliente(cpf)
-    if not veiculos:
-        st.warning("Este cliente não possui veículos cadastrados.")
-        return
-    veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
-    veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
-    veiculo_key = veiculos[veiculo_opcoes.index(veiculo_escolhido)]["key"]
+st.subheader("🚗 Selecionar Veículo")
+veiculos = buscar_veiculos_do_cliente(cpf)
+if not veiculos:
+    st.warning("Este cliente não possui veículos cadastrados.")
+    return
 
-    # Dados da OS
-    st.subheader("📋 Dados da OS")
-    km = st.text_input("KM atual:")
-    data_entrada = st.date_input("Data de entrada:", value=datetime.date.today())
-    data_saida = st.date_input("Previsão de saída:")
-    descricao_os = st.text_area("Descrição da OS:")
+veiculo_opcoes = [f"{v['fields'].get('summary')} ({v['fields'].get('customfield_10134')})" for v in veiculos]
+veiculo_escolhido = st.selectbox("Selecione o Veículo:", veiculo_opcoes)
+veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
+veiculo_key = veiculo_info["key"]
 
-    # Subtarefas
-    st.subheader("🧾 Serviços e Peças")
-    with st.form("form_subtarefas"):
-        col1, col2 = st.columns([3, 1])
-        descricao = col1.text_input("Descrição do item")
-        tipo = col2.selectbox("Tipo", ["Serviço", "Peça"])
-        quantidade = st.number_input("Quantidade", min_value=1, value=1)
-        valor = st.number_input("Valor unitário (R$)", min_value=0.0, format="%.2f")
-        adicionar_item = st.form_submit_button("➕ Adicionar Item")
+# Mostrar dados do veículo
+st.markdown(f"**🔑 ID no Jira:** {veiculo_key}")
+st.markdown(f"**🚘 Identificação:** {veiculo_info['fields'].get('summary')}")
+st.markdown(f"**📍 Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-    if "itens_os" not in st.session_state:
-        st.session_state.itens_os = []
+# Buscar imagem (anexo)
+def obter_foto_veiculo(issue_key):
+    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}?fields=attachment"
+    r = requests.get(url, headers=JIRA_HEADERS)
+    if r.status_code == 200:
+        attachments = r.json()["fields"].get("attachment", [])
+        for a in attachments:
+            if a["mimeType"].startswith("image"):
+                return a["content"]
+    return None
 
-    if adicionar_item and descricao:
-        st.session_state.itens_os.append({"descricao": descricao, "tipo": tipo, "quantidade": quantidade, "valor": valor})
+foto_url = obter_foto_veiculo(veiculo_key)
+if foto_url:
+    st.image(foto_url, width=300, caption="📸 Foto do Veículo")
+else:
+    st.info("Nenhuma imagem encontrada para este veículo.")
 
-    total = 0
-    for i, item in enumerate(st.session_state.itens_os):
-        total += item["quantidade"] * item["valor"]
-        st.markdown(f"{i+1}. **{item['tipo']}** - {item['descricao']} | Qtd: {item['quantidade']} | Valor: R${item['valor']:.2f}")
-
-    st.markdown(f"**💰 Total estimado:** R${total:.2f}")
-
-    if st.button("🚀 Criar OS no Jira"):
-        os_key = criar_os(nome_cliente, cpf, veiculo_key, km, data_entrada.isoformat(), data_saida.isoformat(), descricao_os)
-        if os_key:
-            for item in st.session_state.itens_os:
-                criar_subtarefa(os_key, item["descricao"], item["tipo"], item["quantidade"], item["valor"])
-            st.success(f"✅ OS criada com sucesso: [{os_key}]({JIRA_URL}/browse/{os_key})")
-            st.session_state.itens_os = []
