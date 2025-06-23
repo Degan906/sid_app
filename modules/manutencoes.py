@@ -4,6 +4,7 @@ import base64
 import unicodedata
 import re
 import datetime
+import pandas as pd
 
 # === CONFIG JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
@@ -58,19 +59,11 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
     return None
 
 def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
-    payload = {
-        "fields": {
-            "project": {"key": "MC"},
-            "issuetype": {"id": "10030"},  # Sempre tipo 'Serviços'
-            "parent": {"key": os_key},
-            "summary": descricao,
-            "description": f"Tipo: {tipo}\nDescrição: {descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
-        }
-    }
-    r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
-    if r.status_code != 201:
-        st.error(f"Erro ao adicionar subtarefa: {r.status_code} - {r.text}")
-    return r.status_code == 201
+    if "subtarefas" not in st.session_state:
+        st.session_state.subtarefas = []
+    nova = {"tipo": tipo, "descricao": descricao, "quantidade": quantidade, "valor": valor}
+    st.session_state.subtarefas.append(nova)
+    return True
 
 # === TELA DE MANUTENÇÃO ===
 def tela_manutencoes():
@@ -104,7 +97,6 @@ def tela_manutencoes():
         st.markdown(f"**\U0001F697 Identificação:** {veiculo_info['fields'].get('summary')}")
         st.markdown(f"**\U0001F4CD Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-        # Formulário da OS
         st.subheader("\U0001F4CB Detalhes da OS")
         km = st.text_input("Quilometragem atual do veículo (KM):")
         data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
@@ -115,6 +107,7 @@ def tela_manutencoes():
             os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
             if os_key:
                 st.session_state.os_key = os_key
+                st.session_state.subtarefas = []
                 st.rerun()
     else:
         os_key = st.session_state.os_key
@@ -132,15 +125,32 @@ def tela_manutencoes():
         if st.button("➕ Adicionar Subtarefa"):
             sucesso = criar_subtarefa(os_key, descricao, tipo, quantidade, valor)
             if sucesso:
-                st.success("Subtarefa adicionada com sucesso.")
+                st.success("Item adicionado à lista.")
+
+        # === GRID DE ITENS ADICIONADOS ===
+        if "subtarefas" in st.session_state and st.session_state.subtarefas:
+            df = pd.DataFrame(st.session_state.subtarefas)
+            df["total"] = df["quantidade"] * df["valor"]
+            st.markdown("### 📦 Itens Adicionados")
+            st.dataframe(df.rename(columns={
+                "tipo": "Tipo",
+                "descricao": "Descrição",
+                "quantidade": "Quantidade",
+                "valor": "Valor Unitário",
+                "total": "Total"
+            }), use_container_width=True)
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Finalizar OS"):
+                for item in st.session_state.subtarefas:
+                    criar_subtarefa(os_key, item["descricao"], item["tipo"], item["quantidade"], item["valor"])
                 del st.session_state.os_key
-                st.success("OS finalizada. Pronta para nova abertura.")
+                del st.session_state.subtarefas
+                st.success("OS finalizada com sucesso!")
                 st.rerun()
         with col2:
             if st.button("➕ Nova OS"):
                 del st.session_state.os_key
+                del st.session_state.subtarefas
                 st.rerun()
