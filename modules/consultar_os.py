@@ -14,114 +14,134 @@ HEADERS = {
 }
 
 def tela_consulta_os():
-    st.header("🔧 Consultar Ordens de Serviço (OS)")
+    st.title("🔧 SID - Consulta de Ordens de Serviço (OS)")
 
-    def buscar_todas_os():
+    def buscar_issues():
         jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {
-            "jql": jql,
-            "maxResults": 100,
-            "fields": "summary,description,status,customfield_10134,customfield_10041,customfield_10140,customfield_10136,customfield_10138"
-        }
+        params = {"jql": jql, "maxResults": 100, "fields": "summary,description,customfield_10134,customfield_10140,customfield_10136,customfield_10138,status,customfield_10041"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
-        else:
-            st.error(f"Erro ao buscar OS: {r.status_code}")
-            return []
+        return []
 
-    def buscar_subtarefas(os_key):
+    def buscar_subtarefas(issue_key):
         url = f"{JIRA_URL}/rest/api/2/search"
-        jql = f'parent = {os_key}'
+        jql = f"parent = {issue_key}"
         params = {"jql": jql, "fields": "summary,description"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
         return []
 
-    with st.spinner("🔍 Carregando Ordens de Serviço..."):
-        issues = buscar_todas_os()
+    def aplicar_transicao(issue_key, transition_id):
+        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
+        payload = {"transition": {"id": transition_id}}
+        return requests.post(url, headers=HEADERS, json=payload).status_code == 204
+
+    def buscar_transicoes(issue_key):
+        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            return r.json().get("transitions", [])
+        return []
+
+    def atualizar_os(issue_key, campos):
+        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
+        payload = {"fields": campos}
+        return requests.put(url, headers=HEADERS, json=payload).status_code == 204
+
+    issues = buscar_issues()
 
     if not issues:
         st.warning("Nenhuma OS encontrada.")
         return
 
-    # === MONTA DATAFRAME COMPLETO ===
-    lista_os = []
-    mapa_os = {}
-    for issue in issues:
-        fields = issue["fields"]
+    st.success(f"{len(issues)} OS encontradas.")
+
+    busca = st.text_input("🔎 Buscar por qualquer campo (placa, resumo, marca...)")
+
+    linhas = []
+    for i, issue in enumerate(issues):
         key = issue["key"]
-        resumo = fields.get("summary", "")
-        status = fields.get("status", {}).get("name", "")
-        descricao = fields.get("description", "")
-        placa = fields.get("customfield_10134", "")
-        telefone = fields.get("customfield_10041", "")
-        marca = fields.get("customfield_10140", {}).get("value", "") if fields.get("customfield_10140") else ""
-        modelo = fields.get("customfield_10136", "")
-        ano = fields.get("customfield_10138", "")
+        f = issue["fields"]
+        resumo = f.get("summary", "")
+        descricao = f.get("description", "")
+        placa = f.get("customfield_10134", "")
+        marca = f.get("customfield_10140", {}).get("value", "")
+        modelo = f.get("customfield_10136", "")
+        ano = f.get("customfield_10138", "")
+        telefone = f.get("customfield_10041", "")
+        status = f.get("status", {}).get("name", "")
 
-        lista_os.append({
-            "Key": key,
-            "Resumo": resumo,
-            "Descrição": descricao,
-            "Status": status,
-            "Placa": placa,
-            "Telefone": telefone,
-            "Marca": marca,
-            "Modelo": modelo,
-            "Ano": ano
-        })
-        mapa_os[key] = issue
+        if busca:
+            termo = busca.lower()
+            if not any(termo in str(v).lower() for v in [resumo, descricao, placa, telefone, marca, modelo, ano]):
+                continue
 
-    df_os = pd.DataFrame(lista_os)
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            with st.expander(f"🔧 {key} - {resumo} [{status}]"):
+                st.markdown(f"**Placa:** {placa}  ")
+                st.markdown(f"**Telefone:** {telefone}")
+                st.markdown(f"**Marca:** {marca}")
+                st.markdown(f"**Modelo:** {modelo}")
+                st.markdown(f"**Ano:** {ano}")
+                st.markdown("---")
+                st.markdown("### 🧾 Itens/Subtarefas")
+                subtarefas = buscar_subtarefas(key)
+                if not subtarefas:
+                    st.warning("Nenhuma subtarefa encontrada.")
+                else:
+                    for item in subtarefas:
+                        st.markdown(f"**{item['key']} - {item['fields']['summary']}**")
+                        desc = item["fields"].get("description", "")
+                        st.markdown(f"> {desc}")
+                        st.markdown("---")
 
-    # === BUSCA LOCAL POR QUALQUER CAMPO ===
-    termo = st.text_input("🔎 Buscar por Resumo, Descrição, Placa, Telefone, Marca, Modelo ou Ano:")
+        with col2:
+            if st.button("✏️ Editar", key=f"edit_{i}"):
+                st.session_state["os_editando"] = issue
+                st.rerun()
 
-    if termo:
-        termo_lower = termo.lower()
-        df_filtrado = df_os[df_os.apply(
-            lambda row: any(termo_lower in str(value).lower() for value in [
-                row["Resumo"], row["Descrição"], row["Placa"], row["Telefone"], row["Marca"], row["Modelo"], row["Ano"]
-            ]),
-            axis=1
-        )]
-    else:
-        df_filtrado = df_os
+    if "os_editando" in st.session_state:
+        issue = st.session_state["os_editando"]
+        key = issue["key"]
+        f = issue["fields"]
 
-    st.success(f"✅ {len(df_filtrado)} OS encontrada(s)")
-    st.dataframe(df_filtrado, use_container_width=True)
+        st.markdown("---")
+        st.header(f"🛠️ Editar OS {key}")
 
-    # === EXPANSORES COM DETALHES ===
-    for _, row in df_filtrado.iterrows():
-        key = row["Key"]
-        resumo = row["Resumo"]
-        status = row["Status"]
-        descricao = row["Descrição"]
-        placa = row["Placa"]
-        telefone = row["Telefone"]
-        marca = row["Marca"]
-        modelo = row["Modelo"]
-        ano = row["Ano"]
+        resumo = st.text_input("Resumo", value=f.get("summary", ""))
+        descricao = st.text_area("Descrição", value=f.get("description", ""))
+        placa = st.text_input("Placa", value=f.get("customfield_10134", ""))
+        telefone = st.text_input("Telefone", value=f.get("customfield_10041", ""))
+        marca = st.text_input("Marca", value=f.get("customfield_10140", {}).get("value", ""))
+        modelo = st.text_input("Modelo", value=f.get("customfield_10136", ""))
+        ano = st.text_input("Ano", value=f.get("customfield_10138", ""))
 
-        with st.expander(f"🔧 {resumo} ({key})"):
-            st.markdown(f"**Status:** {status}")
-            st.markdown(f"**Descrição:** {descricao}")
-            st.markdown(f"**Placa:** {placa}")
-            st.markdown(f"**Telefone:** {telefone}")
-            st.markdown(f"**Marca:** {marca}")
-            st.markdown(f"**Modelo:** {modelo}")
-            st.markdown(f"**Ano:** {ano}")
+        transicoes = buscar_transicoes(key)
+        opcoes_status = {t["name"]: t["id"] for t in transicoes}
+        status_atual = f.get("status", {}).get("name", "")
+        novo_status = st.selectbox("Status", options=list(opcoes_status.keys()), index=list(opcoes_status).index(status_atual) if status_atual in opcoes_status else 0)
 
-            subtarefas = buscar_subtarefas(key)
-            if subtarefas:
-                st.markdown("### 🧾 Subtarefas:")
-                for item in subtarefas:
-                    st.markdown(f"- **{item['key']}**: {item['fields']['summary']}")
-                    desc = item["fields"].get("description", "")
-                    if desc:
-                        st.markdown(f"  > {desc}")
+        if st.button("💾 Salvar alterações"):
+            campos = {
+                "summary": resumo,
+                "description": descricao,
+                "customfield_10134": placa,
+                "customfield_10041": telefone,
+                "customfield_10140": {"value": marca},
+                "customfield_10136": modelo,
+                "customfield_10138": ano,
+            }
+            ok = atualizar_os(key, campos)
+            status_ok = aplicar_transicao(key, opcoes_status[novo_status]) if novo_status != status_atual else True
+
+            if ok and status_ok:
+                st.success("OS atualizada com sucesso.")
+                del st.session_state["os_editando"]
+                st.rerun()
             else:
-                st.info("Nenhuma subtarefa encontrada.")
+                st.error("Erro ao atualizar OS. Verifique os campos e tente novamente.")
+
