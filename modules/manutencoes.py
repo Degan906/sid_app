@@ -61,7 +61,7 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
     payload = {
         "fields": {
             "project": {"key": "MC"},
-            "issuetype": {"id": "10030"},
+            "issuetype": {"id": "10030"},  # Sempre tipo 'Serviços'
             "parent": {"key": os_key},
             "summary": descricao,
             "description": f"Tipo: {tipo}\nDescrição: {descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
@@ -72,12 +72,7 @@ def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
         st.error(f"Erro ao adicionar subtarefa: {r.status_code} - {r.text}")
     return r.status_code == 201
 
-def atualizar_total_os(issue_key, total):
-    payload = {"fields": {"customfield_10119": total}}
-    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
-    r = requests.put(url, headers=JIRA_HEADERS, json=payload)
-    return r.status_code == 204
-
+# === TELA DE MANUTENÇÃO ===
 def tela_manutencoes():
     st.title("\U0001F698 SID - Sistema de Manutenção de Veículos")
     st.header("\U0001F6E0️ Abertura de Ordem de Serviço (OS)")
@@ -90,8 +85,9 @@ def tela_manutencoes():
         cliente_escolhido = clientes[nomes.index(cliente_index)]
         cpf = cliente_escolhido['fields'].get('customfield_10040')
         nome_cliente = cliente_escolhido['fields'].get('summary')
+        email_cliente = cliente_escolhido['fields'].get('customfield_10042')
 
-        st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf}")
+        st.info(f"**Cliente:** {nome_cliente} | **CPF:** {cpf} | **Email:** {email_cliente}")
 
         st.subheader("\U0001F697 Selecionar Veículo")
         veiculos = buscar_veiculos_do_cliente(cpf)
@@ -104,60 +100,46 @@ def tela_manutencoes():
         veiculo_info = veiculos[veiculo_opcoes.index(veiculo_escolhido)]
         veiculo_key = veiculo_info["key"]
 
-        km = st.text_input("KM Atual")
-        data_entrada = st.date_input("Data Entrada", value=datetime.date.today())
-        data_saida = st.date_input("Data Prevista Saída", value=datetime.date.today())
-        descricao = st.text_area("Descrição geral do problema")
+        st.markdown(f"**\U0001F511 ID no Jira:** {veiculo_key}")
+        st.markdown(f"**\U0001F697 Identificação:** {veiculo_info['fields'].get('summary')}")
+        st.markdown(f"**\U0001F4CD Placa:** {veiculo_info['fields'].get('customfield_10134')}")
 
-        if st.button("✅ Criar OS"):
+        st.subheader("\U0001F4CB Detalhes da OS")
+        km = st.text_input("Quilometragem atual do veículo (KM):")
+        data_entrada = st.date_input("Data de Entrada", value=datetime.date.today())
+        data_saida = st.date_input("Data Prevista de Saída", value=datetime.date.today())
+        descricao = st.text_area("Descrição geral do problema ou solicitação:")
+
+        if st.button("✅ Criar Ordem de Serviço"):
             os_key = criar_os(nome_cliente, cpf, veiculo_key, km, str(data_entrada), str(data_saida), descricao)
             if os_key:
                 st.session_state.os_key = os_key
-                st.session_state.itens = []
                 st.rerun()
     else:
         os_key = st.session_state.os_key
         st.subheader(f"\U0001F4CC OS em andamento: {os_key}")
+        st.markdown("### \U0001F4DD Adicionar Serviços ou Peças")
 
-        st.markdown("### Itens da OS")
-        with st.form("form_item"):
-            cols = st.columns(4)
-            tipo = cols[0].selectbox("Tipo", ["Serviço", "Peça"])
-            descricao = cols[1].text_input("Descrição")
-            quantidade = cols[2].number_input("Qtd", step=1, min_value=1)
-            valor = cols[3].number_input("Valor R$", step=0.01, min_value=0.0)
-            submitted = st.form_submit_button("Adicionar")
-            if submitted:
-                st.session_state.itens.append({"tipo": tipo, "descricao": descricao, "quantidade": quantidade, "valor": valor})
-                criar_subtarefa(os_key, descricao, tipo, quantidade, valor)
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
+            descricao = st.text_input("Descrição do item")
+        with col2:
+            quantidade = st.number_input("Quantidade", min_value=1, step=1)
+            valor = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01)
 
-        if "itens" in st.session_state and st.session_state.itens:
-            total_servico = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Serviço')
-            total_peca = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Peça')
-            total_geral = total_servico + total_peca
-
-            st.dataframe([
-                {
-                    "Tipo": i['tipo'],
-                    "Descrição": i['descricao'],
-                    "Qtd": i['quantidade'],
-                    "Valor Unitário": f"R$ {i['valor']:.2f}",
-                    "Total": f"R$ {i['quantidade'] * i['valor']:.2f}"
-                } for i in st.session_state.itens
-            ])
-
-            st.success(f"Total de Peças: R$ {total_peca:.2f} | Total de Serviços: R$ {total_servico:.2f} | Total Geral: R$ {total_geral:.2f}")
-            atualizar_total_os(os_key, total_geral)
+        if st.button("➕ Adicionar Subtarefa"):
+            sucesso = criar_subtarefa(os_key, descricao, tipo, quantidade, valor)
+            if sucesso:
+                st.success("Subtarefa adicionada com sucesso.")
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Finalizar OS"):
                 del st.session_state.os_key
-                st.success("OS finalizada.")
+                st.success("OS finalizada. Pronta para nova abertura.")
                 st.rerun()
         with col2:
             if st.button("➕ Nova OS"):
                 del st.session_state.os_key
-                if "itens" in st.session_state:
-                    del st.session_state.itens
                 st.rerun()
