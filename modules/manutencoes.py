@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -147,12 +146,23 @@ def tela_manutencoes():
                     st.session_state.itens.pop(idx)
                     st.rerun()
 
+            # RESUMO ESTILO CARDS
+            pecas_total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == "Peça")
+            servicos_total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == "Serviço")
+            total_geral = pecas_total + servicos_total
+
+            st.markdown("---")
+            st.markdown("### 📋 Resumo do Orçamento")
+            r1, r2, r3 = st.columns(3)
+            r1.metric("🛠️ Total de Peças", f"R$ {pecas_total:.2f}")
+            r2.metric("👷️ Total M.O. (Serviços)", f"R$ {servicos_total:.2f}")
+            r3.metric("💰 Total do Orçamento", f"R$ {total_geral:.2f}")
+
             if st.button("✅ Confirmar Itens e Criar Subtarefas"):
                 for item in st.session_state.itens:
                     criar_subtarefa(os_key, item)
-                total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens)
-                atualizar_total_os(os_key, total)
-                st.success(f"Subtarefas criadas com sucesso. Total da OS: R$ {total:.2f}")
+                atualizar_total_os(os_key, total_geral)
+                st.success(f"Subtarefas criadas com sucesso. Total da OS: R$ {total_geral:.2f}")
                 st.session_state.confirmado = True
 
         if st.session_state.get("confirmado"):
