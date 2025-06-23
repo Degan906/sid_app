@@ -2,7 +2,7 @@
 import streamlit as st
 from modules.clientes import tela_clientes, tela_busca_edicao_clientes
 from modules.veiculos import tela_veiculos, tela_busca_edicao_veiculos
-from modules.manutencoes import tela_manutencoes, tela_consulta_os  # ⬅️ IMPORTANTE
+from modules.manutencoes import tela_manutencoes
 
 st.set_page_config(page_title="SID - Sistema de Manutenção", layout="wide")
 st.title("🚗 SID - Sistema de Manutenção de Veículos")
@@ -13,8 +13,7 @@ menu = st.sidebar.selectbox("Menu", [
     "Buscar/Editar Clientes",
     "Cadastro de Veículos",
     "Buscar/Editar Veículos",
-    "Cadastro de Manutenções",
-    "Consultar OS"
+    "Cadastro de Manutenções"
 ])
 
 # === ROTEAMENTO POR MENU ===
@@ -28,8 +27,6 @@ elif menu == "Buscar/Editar Veículos":
     tela_busca_edicao_veiculos()
 elif menu == "Cadastro de Manutenções":
     tela_manutencoes()
-elif menu == "Consultar OS":
-    tela_consulta_os()
 
 # === REDIRECIONAMENTO PARA TELA DE OS ABERTA ===
 if st.session_state.get("tela_atual") == "manutencoes":
