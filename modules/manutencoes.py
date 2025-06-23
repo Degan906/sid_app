@@ -213,4 +213,4 @@ def tela_consulta_os():
             st.session_state.os_key = key
             st.session_state.itens = []  # Opcional: reprocessar depois
             st.session_state.confirmado = False
-            st.experimental_rerun()
+            st.rerun()
