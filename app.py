@@ -2,11 +2,12 @@
 import streamlit as st
 from modules.clientes import tela_clientes, tela_busca_edicao_clientes
 from modules.veiculos import tela_veiculos, tela_busca_edicao_veiculos
-from modules.manutencoes import tela_manutencoes
+from modules.manutencoes import tela_manutencoes, tela_consulta_os  # ⬅️ IMPORTANTE
 
 st.set_page_config(page_title="SID - Sistema de Manutenção", layout="wide")
 st.title("🚗 SID - Sistema de Manutenção de Veículos")
 
+# === MENU ===
 menu = st.sidebar.selectbox("Menu", [
     "Cadastro de Clientes",
     "Buscar/Editar Clientes",
@@ -16,6 +17,7 @@ menu = st.sidebar.selectbox("Menu", [
     "Consultar OS"
 ])
 
+# === ROTEAMENTO POR MENU ===
 if menu == "Cadastro de Clientes":
     tela_clientes()
 elif menu == "Buscar/Editar Clientes":
@@ -27,14 +29,8 @@ elif menu == "Buscar/Editar Veículos":
 elif menu == "Cadastro de Manutenções":
     tela_manutencoes()
 elif menu == "Consultar OS":
-    st.subheader("🔍 Consulta de Ordens de Serviço")
-    st.info("Clique no botão abaixo para abrir a tela de consulta de OS em uma nova aba.")
-    
-    # 🔗 Altere esta URL para a real do seu app quando publicado
-    url_consulta = "https://seu-app.streamlit.app/consultar_os"
-    
-    st.markdown(f"""
-        <a href="{url_consulta}" target="_blank">
-            <button style='padding:10px 20px; font-size:16px;'>Abrir Consulta de OS 🔎</button>
-        </a>
-    """, unsafe_allow_html=True)
+    tela_consulta_os()
+
+# === REDIRECIONAMENTO PARA TELA DE OS ABERTA ===
+if st.session_state.get("tela_atual") == "manutencoes":
+    tela_manutencoes()
