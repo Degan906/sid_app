@@ -137,6 +137,25 @@ def tela_manutencoes():
 
         if st.session_state.itens:
             st.markdown("#### Itens pendentes")
+
+            # Calcular totais
+            total_pecas = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Peça')
+            total_servicos = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Serviço')
+            total_geral = total_pecas + total_servicos
+
+            # Mostrar cards visuais
+            col_p, col_s, col_t = st.columns(3)
+            with col_p:
+                st.markdown("### 🧰 Total de Peças")
+                st.metric(label="", value=f"R$ {total_pecas:.2f}")
+            with col_s:
+                st.markdown("### 🛠️ Total M.O. (Serviços)")
+                st.metric(label="", value=f"R$ {total_servicos:.2f}")
+            with col_t:
+                st.markdown("### 💰 Total do Orçamento")
+                st.metric(label="", value=f"R$ {total_geral:.2f}")
+
+            # Tabela de itens
             for idx, item in enumerate(st.session_state.itens):
                 col1, col2, col3, col4, col5, col6 = st.columns([1.5, 3, 1, 2, 2, 1])
                 col1.write(item['tipo'])
@@ -147,6 +166,7 @@ def tela_manutencoes():
                 if col6.button("🗑️", key=f"del_{idx}"):
                     st.session_state.itens.pop(idx)
                     st.rerun()
+
 
             if st.button("✅ Confirmar Itens e Criar Subtarefas"):
                 for item in st.session_state.itens:
