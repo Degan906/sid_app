@@ -19,7 +19,11 @@ def tela_consulta_os():
     def buscar_todas_os():
         jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 100, "fields": "summary,description,status"}
+        params = {
+            "jql": jql,
+            "maxResults": 100,
+            "fields": "summary,description,status,customfield_10134,customfield_10041,customfield_10140,customfield_10136,customfield_10138"
+        }
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
@@ -36,7 +40,6 @@ def tela_consulta_os():
             return r.json().get("issues", [])
         return []
 
-    # === BUSCA INICIAL ===
     with st.spinner("🔍 Carregando Ordens de Serviço..."):
         issues = buscar_todas_os()
 
@@ -44,46 +47,73 @@ def tela_consulta_os():
         st.warning("Nenhuma OS encontrada.")
         return
 
-    # === MONTA DATAFRAME ===
+    # === MONTA DATAFRAME COMPLETO ===
     lista_os = []
     mapa_os = {}
     for issue in issues:
+        fields = issue["fields"]
         key = issue["key"]
-        summary = issue["fields"].get("summary", "")
-        status = issue["fields"].get("status", {}).get("name", "")
-        descricao = issue["fields"].get("description", "")
+        resumo = fields.get("summary", "")
+        status = fields.get("status", {}).get("name", "")
+        descricao = fields.get("description", "")
+        placa = fields.get("customfield_10134", "")
+        telefone = fields.get("customfield_10041", "")
+        marca = fields.get("customfield_10140", {}).get("value", "") if fields.get("customfield_10140") else ""
+        modelo = fields.get("customfield_10136", "")
+        ano = fields.get("customfield_10138", "")
+
         lista_os.append({
             "Key": key,
-            "Resumo": summary,
+            "Resumo": resumo,
+            "Descrição": descricao,
             "Status": status,
-            "Descrição": descricao
+            "Placa": placa,
+            "Telefone": telefone,
+            "Marca": marca,
+            "Modelo": modelo,
+            "Ano": ano
         })
-        mapa_os[key] = issue  # salva para expanders
+        mapa_os[key] = issue
 
     df_os = pd.DataFrame(lista_os)
 
-    # === CAMPO DE BUSCA LOCAL ===
-    termo = st.text_input("🔎 Buscar OS por resumo ou status:")
+    # === BUSCA LOCAL POR QUALQUER CAMPO ===
+    termo = st.text_input("🔎 Buscar por Resumo, Descrição, Placa, Telefone, Marca, Modelo ou Ano:")
 
     if termo:
-        df_filtrado = df_os[df_os.apply(lambda row: termo.lower() in str(row["Resumo"]).lower() or termo.lower() in str(row["Status"]).lower(), axis=1)]
+        termo_lower = termo.lower()
+        df_filtrado = df_os[df_os.apply(
+            lambda row: any(termo_lower in str(value).lower() for value in [
+                row["Resumo"], row["Descrição"], row["Placa"], row["Telefone"], row["Marca"], row["Modelo"], row["Ano"]
+            ]),
+            axis=1
+        )]
     else:
         df_filtrado = df_os
 
     st.success(f"✅ {len(df_filtrado)} OS encontrada(s)")
     st.dataframe(df_filtrado, use_container_width=True)
 
-    # === EXPANSORES ===
+    # === EXPANSORES COM DETALHES ===
     for _, row in df_filtrado.iterrows():
         key = row["Key"]
         resumo = row["Resumo"]
         status = row["Status"]
         descricao = row["Descrição"]
-        issue = mapa_os[key]
+        placa = row["Placa"]
+        telefone = row["Telefone"]
+        marca = row["Marca"]
+        modelo = row["Modelo"]
+        ano = row["Ano"]
 
         with st.expander(f"🔧 {resumo} ({key})"):
             st.markdown(f"**Status:** {status}")
             st.markdown(f"**Descrição:** {descricao}")
+            st.markdown(f"**Placa:** {placa}")
+            st.markdown(f"**Telefone:** {telefone}")
+            st.markdown(f"**Marca:** {marca}")
+            st.markdown(f"**Modelo:** {modelo}")
+            st.markdown(f"**Ano:** {ano}")
 
             subtarefas = buscar_subtarefas(key)
             if subtarefas:
