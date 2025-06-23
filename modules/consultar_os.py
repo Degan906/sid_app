@@ -27,7 +27,7 @@ def tela_consulta_os():
     def buscar_os_por_placa(placa):
         jql = f'project = MC AND issuetype = "OS" AND description ~ "{placa}" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 5, "fields": "summary,description,status"}
+        params = {"jql": jql, "maxResults": 20, "fields": "summary,description,status"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
@@ -82,9 +82,9 @@ def tela_consulta_os():
                         desc = item["fields"].get("description", "")
                         st.markdown(f"> {desc}")
                         st.markdown("---")
-
             else:
                 st.error("OS não encontrada.")
+
     else:
         placa = st.text_input("Digite a placa (ex: ABC1234)")
         if placa and st.button("🔍 Buscar por Placa"):
@@ -93,12 +93,53 @@ def tela_consulta_os():
                 st.warning("Nenhuma OS encontrada com essa placa.")
             else:
                 st.success(f"{len(resultados)} OS encontradas.")
+
+                # Monta dados da tabela
+                tabela_os = []
+                ids_os = []
+                mapa_os = {}
                 for os_item in resultados:
                     key = os_item["key"]
                     summary = os_item["fields"]["summary"]
                     status = os_item["fields"]["status"]["name"]
-                    desc = os_item["fields"].get("description", "")
-                    st.markdown(f"### 🔧 {key} - {summary}")
-                    st.markdown(f"**Status:** {status}")
-                    st.markdown(f"**Descrição:**\n{desc}")
+                    descricao = os_item["fields"].get("description", "").strip()
+
+                    tabela_os.append({
+                        "ID": key,
+                        "Resumo": summary,
+                        "Status": status,
+                        "Descrição": descricao
+                    })
+                    ids_os.append(f"{key} - {summary}")
+                    mapa_os[key] = os_item
+
+                st.dataframe(tabela_os, use_container_width=True)
+
+                # Select de OS
+                opcao = st.selectbox("🔍 Ver detalhes da OS:", ids_os)
+
+                if opcao:
+                    os_id = opcao.split(" - ")[0]
+                    os_data = mapa_os[os_id]
+
                     st.markdown("---")
+                    st.subheader(f"📋 Detalhes da OS {os_id}")
+
+                    resumo = os_data["fields"]["summary"]
+                    descricao = os_data["fields"].get("description", "")
+                    status = os_data["fields"]["status"]["name"]
+
+                    st.markdown(f"**Resumo:** {resumo}")
+                    st.markdown(f"**Status:** {status}")
+                    st.markdown(f"**Descrição:**\n{descricao}")
+
+                    subtarefas = buscar_subtarefas(os_id)
+                    if subtarefas:
+                        st.markdown("### 🧾 Subtarefas")
+                        for item in subtarefas:
+                            st.markdown(f"**{item['key']} - {item['fields']['summary']}**")
+                            desc = item["fields"].get("description", "")
+                            st.markdown(f"> {desc}")
+                            st.markdown("---")
+                    else:
+                        st.info("Nenhuma subtarefa encontrada.")
