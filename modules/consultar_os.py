@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import base64
-import re
+import pandas as pd
 
 # === CONFIGURAÇÃO JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
@@ -14,20 +14,12 @@ HEADERS = {
 }
 
 def tela_consulta_os():
-    st.title("🔧 SID - Consulta de Ordens de Serviço (OS)")
-
-    # === FUNÇÕES AUXILIARES ===
-    def buscar_os_por_id(os_key):
-        url = f"{JIRA_URL}/rest/api/2/issue/{os_key}"
-        r = requests.get(url, headers=HEADERS)
-        if r.status_code == 200:
-            return r.json()
-        return None
+    st.header("🔧 Consultar Ordens de Serviço (OS)")
 
     def buscar_os_por_placa(placa):
         jql = f'project = MC AND issuetype = "OS" AND description ~ "{placa}" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 20, "fields": "summary,description,status"}
+        params = {"jql": jql, "maxResults": 50, "fields": "summary,description,status"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
@@ -42,104 +34,49 @@ def tela_consulta_os():
             return r.json().get("issues", [])
         return []
 
-    def atualizar_descricao_os(issue_key, nova_descricao):
-        payload = {"fields": {"description": nova_descricao}}
-        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
-        r = requests.put(url, headers=HEADERS, json=payload)
-        return r.status_code == 204
+    placa = st.text_input("🔍 Buscar OS por placa (campo descrição):")
 
-    # === INTERFACE ===
-    modo_busca = st.radio("Buscar OS por:", ["ID da OS", "Placa do veículo"])
+    if placa and st.button("Buscar OS"):
+        with st.spinner("🔎 Buscando Ordens de Serviço..."):
+            issues = buscar_os_por_placa(placa)
 
-    if modo_busca == "ID da OS":
-        os_id = st.text_input("Digite a ID da OS (ex: MC-123)")
-        if os_id and st.button("🔍 Buscar OS"):
-            os_data = buscar_os_por_id(os_id)
-            if os_data:
-                st.success(f"OS {os_id} encontrada.")
-                st.subheader("📋 Dados da OS")
-                summary = os_data["fields"]["summary"]
-                descricao = os_data["fields"].get("description", "")
-                status = os_data["fields"]["status"]["name"]
+        if issues:
+            st.success(f"✅ {len(issues)} OS encontrada(s)")
 
-                nova_desc = st.text_area("Descrição", value=descricao, height=200)
+            # Tabela de resumo
+            dados = []
+            for issue in issues:
+                fields = issue["fields"]
+                dados.append({
+                    "Key": issue["key"],
+                    "Resumo": fields.get("summary", "—"),
+                    "Status": fields.get("status", {}).get("name", "—"),
+                    "Descrição": fields.get("description", "—")
+                })
+            df = pd.DataFrame(dados)
+            st.dataframe(df, use_container_width=True)
 
-                if st.button("💾 Salvar Descrição"):
-                    sucesso = atualizar_descricao_os(os_id, nova_desc)
-                    if sucesso:
-                        st.success("Descrição atualizada com sucesso.")
-                    else:
-                        st.error("Erro ao atualizar descrição.")
+            # Expanders com detalhes
+            for issue in issues:
+                key = issue["key"]
+                fields = issue["fields"]
+                resumo = fields.get("summary", "—")
+                status = fields.get("status", {}).get("name", "—")
+                descricao = fields.get("description", "—")
 
-                st.markdown("---")
-                st.subheader("🧾 Itens/Subtarefas")
-                subtarefas = buscar_subtarefas(os_id)
-                if not subtarefas:
-                    st.warning("Nenhuma subtarefa encontrada.")
-                else:
-                    for item in subtarefas:
-                        st.markdown(f"**{item['key']} - {item['fields']['summary']}**")
-                        desc = item["fields"].get("description", "")
-                        st.markdown(f"> {desc}")
-                        st.markdown("---")
-            else:
-                st.error("OS não encontrada.")
-
-    else:
-        placa = st.text_input("Digite a placa (ex: ABC1234)")
-        if placa and st.button("🔍 Buscar por Placa"):
-            resultados = buscar_os_por_placa(placa)
-            if not resultados:
-                st.warning("Nenhuma OS encontrada com essa placa.")
-            else:
-                st.success(f"{len(resultados)} OS encontradas.")
-
-                # Monta dados da tabela
-                tabela_os = []
-                ids_os = []
-                mapa_os = {}
-                for os_item in resultados:
-                    key = os_item["key"]
-                    summary = os_item["fields"]["summary"]
-                    status = os_item["fields"]["status"]["name"]
-                    descricao = os_item["fields"].get("description", "").strip()
-
-                    tabela_os.append({
-                        "ID": key,
-                        "Resumo": summary,
-                        "Status": status,
-                        "Descrição": descricao
-                    })
-                    ids_os.append(f"{key} - {summary}")
-                    mapa_os[key] = os_item
-
-                st.dataframe(tabela_os, use_container_width=True)
-
-                # Select de OS
-                opcao = st.selectbox("🔍 Ver detalhes da OS:", ids_os)
-
-                if opcao:
-                    os_id = opcao.split(" - ")[0]
-                    os_data = mapa_os[os_id]
-
-                    st.markdown("---")
-                    st.subheader(f"📋 Detalhes da OS {os_id}")
-
-                    resumo = os_data["fields"]["summary"]
-                    descricao = os_data["fields"].get("description", "")
-                    status = os_data["fields"]["status"]["name"]
-
-                    st.markdown(f"**Resumo:** {resumo}")
+                with st.expander(f"🔧 {resumo} ({key})"):
                     st.markdown(f"**Status:** {status}")
-                    st.markdown(f"**Descrição:**\n{descricao}")
+                    st.markdown(f"**Descrição:** {descricao}")
 
-                    subtarefas = buscar_subtarefas(os_id)
+                    subtarefas = buscar_subtarefas(key)
                     if subtarefas:
-                        st.markdown("### 🧾 Subtarefas")
+                        st.markdown("### 🧾 Subtarefas:")
                         for item in subtarefas:
-                            st.markdown(f"**{item['key']} - {item['fields']['summary']}**")
+                            st.markdown(f"- **{item['key']}**: {item['fields']['summary']}")
                             desc = item["fields"].get("description", "")
-                            st.markdown(f"> {desc}")
-                            st.markdown("---")
+                            if desc:
+                                st.markdown(f"  > {desc}")
                     else:
                         st.info("Nenhuma subtarefa encontrada.")
+        else:
+            st.warning("Nenhuma OS encontrada com essa placa.")
