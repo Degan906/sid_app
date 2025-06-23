@@ -57,20 +57,19 @@ def criar_os(cliente_nome, cliente_cpf, veiculo_key, km, data_entrada, data_said
     st.error(f"Erro ao criar OS: {r.status_code} - {r.text}")
     return None
 
-def criar_subtarefa(os_key, descricao, tipo, quantidade, valor):
+def criar_subtarefa(os_key, item):
     payload = {
         "fields": {
             "project": {"key": "MC"},
             "issuetype": {"id": "10030"},
             "parent": {"key": os_key},
-            "summary": descricao,
-            "description": f"Tipo: {tipo}\nDescrição: {descricao}\nQuantidade: {quantidade}\nValor: R${valor:.2f}"
+            "summary": item['descricao'],
+            "description": f"Tipo: {item['tipo']}\nDescrição: {item['descricao']}\nQuantidade: {item['quantidade']}\nValor: R${item['valor']:.2f}"
         }
     }
     r = requests.post(f"{JIRA_URL}/rest/api/2/issue", headers=JIRA_HEADERS, json=payload)
     if r.status_code != 201:
         st.error(f"Erro ao adicionar subtarefa: {r.status_code} - {r.text}")
-    return r.status_code == 201
 
 def atualizar_total_os(issue_key, total):
     payload = {"fields": {"customfield_10119": total}}
@@ -114,50 +113,60 @@ def tela_manutencoes():
             if os_key:
                 st.session_state.os_key = os_key
                 st.session_state.itens = []
+                st.session_state.confirmado = False
                 st.rerun()
+
     else:
         os_key = st.session_state.os_key
         st.subheader(f"\U0001F4CC OS em andamento: {os_key}")
 
         st.markdown("### Itens da OS")
-        with st.form("form_item"):
-            cols = st.columns(4)
-            tipo = cols[0].selectbox("Tipo", ["Serviço", "Peça"])
-            descricao = cols[1].text_input("Descrição")
-            quantidade = cols[2].number_input("Qtd", step=1, min_value=1)
-            valor = cols[3].number_input("Valor R$", step=0.01, min_value=0.0)
-            submitted = st.form_submit_button("Adicionar")
-            if submitted:
-                st.session_state.itens.append({"tipo": tipo, "descricao": descricao, "quantidade": quantidade, "valor": valor})
-                criar_subtarefa(os_key, descricao, tipo, quantidade, valor)
+        cols = st.columns(5)
+        with cols[0]: tipo = st.selectbox("Tipo", ["Serviço", "Peça"])
+        with cols[1]: descricao = st.text_input("Descrição")
+        with cols[2]: quantidade = st.number_input("Qtd", step=1, min_value=1, key="qtd")
+        with cols[3]: valor = st.number_input("Valor R$", step=0.01, min_value=0.0, key="valor")
+        with cols[4]:
+            total_temp = quantidade * valor
+            st.write(f"**Total:** R$ {total_temp:.2f}")
 
-        if "itens" in st.session_state and st.session_state.itens:
-            total_servico = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Serviço')
-            total_peca = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == 'Peça')
-            total_geral = total_servico + total_peca
+        if st.button("Adicionar Item"):
+            st.session_state.itens.append({"tipo": tipo, "descricao": descricao, "quantidade": quantidade, "valor": valor})
 
-            st.dataframe([
-                {
-                    "Tipo": i['tipo'],
-                    "Descrição": i['descricao'],
-                    "Qtd": i['quantidade'],
-                    "Valor Unitário": f"R$ {i['valor']:.2f}",
-                    "Total": f"R$ {i['quantidade'] * i['valor']:.2f}"
-                } for i in st.session_state.itens
-            ])
+        if st.session_state.itens:
+            st.markdown("#### Itens pendentes")
+            for idx, item in enumerate(st.session_state.itens):
+                col1, col2, col3, col4, col5, col6 = st.columns([1.5, 3, 1, 2, 2, 1])
+                col1.write(item['tipo'])
+                col2.write(item['descricao'])
+                col3.write(item['quantidade'])
+                col4.write(f"R$ {item['valor']:.2f}")
+                col5.write(f"R$ {item['quantidade'] * item['valor']:.2f}")
+                if col6.button("🗑️", key=f"del_{idx}"):
+                    st.session_state.itens.pop(idx)
+                    st.rerun()
 
-            st.success(f"Total de Peças: R$ {total_peca:.2f} | Total de Serviços: R$ {total_servico:.2f} | Total Geral: R$ {total_geral:.2f}")
-            atualizar_total_os(os_key, total_geral)
+            if st.button("✅ Confirmar Itens e Criar Subtarefas"):
+                for item in st.session_state.itens:
+                    criar_subtarefa(os_key, item)
+                total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens)
+                atualizar_total_os(os_key, total)
+                st.success(f"Subtarefas criadas com sucesso. Total da OS: R$ {total:.2f}")
+                st.session_state.confirmado = True
+
+        if st.session_state.get("confirmado"):
+            st.info("Todos os itens foram confirmados e salvos no Jira.")
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("✅ Finalizar OS"):
-                del st.session_state.os_key
-                st.success("OS finalizada.")
+            if st.button("🔚 Finalizar OS"):
+                for key in ["os_key", "itens", "confirmado"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
                 st.rerun()
         with col2:
             if st.button("➕ Nova OS"):
-                del st.session_state.os_key
-                if "itens" in st.session_state:
-                    del st.session_state.itens
+                for key in ["os_key", "itens", "confirmado"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
                 st.rerun()
