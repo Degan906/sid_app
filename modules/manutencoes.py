@@ -200,19 +200,21 @@ def tela_consulta_os():
         summary = issue["fields"].get("summary", "-")
         status = issue["fields"].get("status", {}).get("name", "-")
 
+        # Extrai cliente e placa do summary
         cliente_match = re.search(r"OS - (.*?) \(", summary)
         cliente = cliente_match.group(1) if cliente_match else "-"
         placa_match = re.search(r"\((.*?)\)", summary)
         placa = placa_match.group(1) if placa_match else "-"
 
+        # Exibe os dados principais em linha
         cols = st.columns([2, 4, 2, 2])
         cols[0].markdown(f"**{key}**")
         cols[1].markdown(f"{cliente}")
         cols[2].markdown(f"{placa}")
         cols[3].markdown(f"📋 *{status}*")
 
-        # Linha separada com botão
-        if st.button(f"📂 Abrir OS {key}", key=f"abrir_{key}"):
+        # Botão separado para evitar conflito de estado
+        if st.button(f"📂 Abrir OS {key}", key=f"abrir_os_{key}"):
             st.session_state.tela_atual = "manutencoes"
             st.session_state.os_key = key
             st.session_state.itens = []
@@ -220,9 +222,10 @@ def tela_consulta_os():
             st.rerun()
 
 
+
 # === LÓGICA DE NAVEGAÇÃO ===
 if "tela_atual" not in st.session_state:
-    st.session_state.tela_atual = "consulta_os"  # Define a tela inicial
+    st.session_state.tela_atual = "consulta_os"
 
 if st.session_state.tela_atual == "consulta_os":
     tela_consulta_os()
