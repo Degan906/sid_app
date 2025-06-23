@@ -171,7 +171,7 @@ def tela_manutencoes():
                 for key in ["os_key", "itens", "confirmado"]:
                     if key in st.session_state:
                         del st.session_state[key]
-                st.rerun()
+                
 
 def tela_consulta_os():
     st.title("🔍 Consultar Ordens de Serviço")
