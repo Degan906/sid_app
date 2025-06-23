@@ -16,14 +16,16 @@ HEADERS = {
 def tela_consulta_os():
     st.header("🔧 Consultar Ordens de Serviço (OS)")
 
-    def buscar_os_por_placa(placa):
-        jql = f'project = MC AND issuetype = "OS" AND description ~ "{placa}" ORDER BY created DESC'
+    def buscar_todas_os():
+        jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 50, "fields": "summary,description,status"}
+        params = {"jql": jql, "maxResults": 100, "fields": "summary,description,status"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
-        return []
+        else:
+            st.error(f"Erro ao buscar OS: {r.status_code}")
+            return []
 
     def buscar_subtarefas(os_key):
         url = f"{JIRA_URL}/rest/api/2/search"
@@ -34,49 +36,62 @@ def tela_consulta_os():
             return r.json().get("issues", [])
         return []
 
-    placa = st.text_input("🔍 Buscar OS por placa (campo descrição):")
+    # === BUSCA INICIAL ===
+    with st.spinner("🔍 Carregando Ordens de Serviço..."):
+        issues = buscar_todas_os()
 
-    if placa and st.button("Buscar OS"):
-        with st.spinner("🔎 Buscando Ordens de Serviço..."):
-            issues = buscar_os_por_placa(placa)
+    if not issues:
+        st.warning("Nenhuma OS encontrada.")
+        return
 
-        if issues:
-            st.success(f"✅ {len(issues)} OS encontrada(s)")
+    # === MONTA DATAFRAME ===
+    lista_os = []
+    mapa_os = {}
+    for issue in issues:
+        key = issue["key"]
+        summary = issue["fields"].get("summary", "")
+        status = issue["fields"].get("status", {}).get("name", "")
+        descricao = issue["fields"].get("description", "")
+        lista_os.append({
+            "Key": key,
+            "Resumo": summary,
+            "Status": status,
+            "Descrição": descricao
+        })
+        mapa_os[key] = issue  # salva para expanders
 
-            # Tabela de resumo
-            dados = []
-            for issue in issues:
-                fields = issue["fields"]
-                dados.append({
-                    "Key": issue["key"],
-                    "Resumo": fields.get("summary", "—"),
-                    "Status": fields.get("status", {}).get("name", "—"),
-                    "Descrição": fields.get("description", "—")
-                })
-            df = pd.DataFrame(dados)
-            st.dataframe(df, use_container_width=True)
+    df_os = pd.DataFrame(lista_os)
 
-            # Expanders com detalhes
-            for issue in issues:
-                key = issue["key"]
-                fields = issue["fields"]
-                resumo = fields.get("summary", "—")
-                status = fields.get("status", {}).get("name", "—")
-                descricao = fields.get("description", "—")
+    # === CAMPO DE BUSCA LOCAL ===
+    termo = st.text_input("🔎 Buscar OS por resumo ou status:")
 
-                with st.expander(f"🔧 {resumo} ({key})"):
-                    st.markdown(f"**Status:** {status}")
-                    st.markdown(f"**Descrição:** {descricao}")
+    if termo:
+        df_filtrado = df_os[df_os.apply(lambda row: termo.lower() in str(row["Resumo"]).lower() or termo.lower() in str(row["Status"]).lower(), axis=1)]
+    else:
+        df_filtrado = df_os
 
-                    subtarefas = buscar_subtarefas(key)
-                    if subtarefas:
-                        st.markdown("### 🧾 Subtarefas:")
-                        for item in subtarefas:
-                            st.markdown(f"- **{item['key']}**: {item['fields']['summary']}")
-                            desc = item["fields"].get("description", "")
-                            if desc:
-                                st.markdown(f"  > {desc}")
-                    else:
-                        st.info("Nenhuma subtarefa encontrada.")
-        else:
-            st.warning("Nenhuma OS encontrada com essa placa.")
+    st.success(f"✅ {len(df_filtrado)} OS encontrada(s)")
+    st.dataframe(df_filtrado, use_container_width=True)
+
+    # === EXPANSORES ===
+    for _, row in df_filtrado.iterrows():
+        key = row["Key"]
+        resumo = row["Resumo"]
+        status = row["Status"]
+        descricao = row["Descrição"]
+        issue = mapa_os[key]
+
+        with st.expander(f"🔧 {resumo} ({key})"):
+            st.markdown(f"**Status:** {status}")
+            st.markdown(f"**Descrição:** {descricao}")
+
+            subtarefas = buscar_subtarefas(key)
+            if subtarefas:
+                st.markdown("### 🧾 Subtarefas:")
+                for item in subtarefas:
+                    st.markdown(f"- **{item['key']}**: {item['fields']['summary']}")
+                    desc = item["fields"].get("description", "")
+                    if desc:
+                        st.markdown(f"  > {desc}")
+            else:
+                st.info("Nenhuma subtarefa encontrada.")
