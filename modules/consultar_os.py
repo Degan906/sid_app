@@ -1,10 +1,9 @@
 import streamlit as st
 import requests
 import base64
-import pandas as pd
 
 # === CONFIGURAÇÃO JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_URL = "https://hcdconsultoria.atlassian.net"   
 EMAIL = "degan906@gmail.com"
 TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 HEADERS = {
@@ -17,31 +16,52 @@ def tela_consulta_os():
     st.title("🔧 SID - Consulta de Ordens de Serviço (OS)")
 
     def buscar_oss():
+        """
+        Busca todas as ordens de serviço (OS) no Jira.
+        """
         jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
         params = {"jql": jql, "maxResults": 50, "fields": "summary,description,status,customfield_10134,customfield_10041,customfield_10140,customfield_10136,customfield_10138"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
-        return []
+        else:
+            st.error(f"Erro ao buscar OS: {r.status_code} - {r.text}")
+            return []
 
     def buscar_subtarefas(os_key):
+        """
+        Busca as subtarefas associadas a uma ordem de serviço (OS).
+        """
         url = f"{JIRA_URL}/rest/api/2/search"
         jql = f'parent = {os_key}'
         params = {"jql": jql, "fields": "summary,description"}
         r = requests.get(url, headers=HEADERS, params=params)
+        
         if r.status_code == 200:
-            return r.json().get("issues", [])
-        return []
+            data = r.json()
+            issues = data.get("issues", [])
+            return issues
+        else:
+            st.error(f"Erro ao buscar subtarefas: {r.status_code} - {r.text}")
+            return []
 
     def buscar_transicoes(issue_key):
+        """
+        Busca as transições disponíveis para uma issue específica.
+        """
         url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
         r = requests.get(url, headers=HEADERS)
         if r.status_code == 200:
             return r.json().get("transitions", [])
-        return []
+        else:
+            st.error(f"Erro ao buscar transições: {r.status_code} - {r.text}")
+            return []
 
     def aplicar_edicao(issue_key, campos, status_id=None):
+        """
+        Aplica as alterações em uma issue e, opcionalmente, altera seu status.
+        """
         payload = {"fields": campos}
         url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
         r1 = requests.put(url, headers=HEADERS, json=payload)
@@ -53,6 +73,7 @@ def tela_consulta_os():
 
         return r1.status_code == 204
 
+    # Busca todas as OS
     oss = buscar_oss()
     termo_busca = st.text_input("🔍 Buscar OS", placeholder="Resumo, descrição, placa, telefone, marca, modelo, ano")
 
@@ -80,13 +101,18 @@ def tela_consulta_os():
             st.markdown(f"**Modelo:** {modelo}  ")
             st.markdown(f"**Ano:** {ano}  ")
 
+            # Busca e exibe subtarefas
             subtarefas = buscar_subtarefas(key)
+            st.write("Subtarefas retornadas pela API:", subtarefas)  # Log temporário para depuração
             if subtarefas:
                 st.markdown("---")
                 st.subheader("🧾 Subtarefas")
                 for sub in subtarefas:
-                    st.markdown(f"**{sub['key']} - {sub['fields']['summary']}**")
-                    st.markdown(f"> {sub['fields'].get('description', '')}")
+                    sub_key = sub["key"]
+                    sub_summary = sub["fields"].get("summary", "Sem resumo")
+                    sub_description = sub["fields"].get("description", "Sem descrição")
+                    st.markdown(f"**{sub_key} - {sub_summary}**")
+                    st.markdown(f"> {sub_description}")
             else:
                 st.markdown("_Nenhuma subtarefa encontrada._")
 
@@ -148,3 +174,7 @@ def tela_consulta_os():
         if cancelar:
             del st.session_state["editar_os"]
             st.rerun()
+
+# Executa a interface
+if __name__ == "__main__":
+    tela_consulta_os()
