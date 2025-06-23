@@ -211,13 +211,14 @@ def tela_consulta_os():
         cols[2].markdown(f"{placa}")
         cols[3].markdown(f"📋 *{status}*")
 
-        # Botão "Abrir" para cada OS
-        if cols[0].button("Abrir", key=f"abrir_{key}"):
-            st.session_state.tela_atual = "manutencoes"  # Altera o estado para abrir a tela de manutenções
+        # Linha separada com botão
+        if st.button(f"📂 Abrir OS {key}", key=f"abrir_{key}"):
+            st.session_state.tela_atual = "manutencoes"
             st.session_state.os_key = key
-            st.session_state.itens = []  # Limpa os itens anteriores
+            st.session_state.itens = []
             st.session_state.confirmado = False
-            st.rerun()  # Força a atualização da tela
+            st.rerun()
+
 
 # === LÓGICA DE NAVEGAÇÃO ===
 if "tela_atual" not in st.session_state:
