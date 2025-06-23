@@ -16,28 +16,23 @@ HEADERS = {
 def tela_consulta_os():
     st.title("🔧 SID - Consulta de Ordens de Serviço (OS)")
 
-    def buscar_issues():
+    def buscar_oss():
         jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
         url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 100, "fields": "summary,description,customfield_10134,customfield_10140,customfield_10136,customfield_10138,status,customfield_10041"}
+        params = {"jql": jql, "maxResults": 50, "fields": "summary,description,status,customfield_10134,customfield_10041,customfield_10140,customfield_10136,customfield_10138"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
         return []
 
-    def buscar_subtarefas(issue_key):
+    def buscar_subtarefas(os_key):
         url = f"{JIRA_URL}/rest/api/2/search"
-        jql = f"parent = {issue_key}"
+        jql = f'parent = {os_key}'
         params = {"jql": jql, "fields": "summary,description"}
         r = requests.get(url, headers=HEADERS, params=params)
         if r.status_code == 200:
             return r.json().get("issues", [])
         return []
-
-    def aplicar_transicao(issue_key, transition_id):
-        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
-        payload = {"transition": {"id": transition_id}}
-        return requests.post(url, headers=HEADERS, json=payload).status_code == 204
 
     def buscar_transicoes(issue_key):
         url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
@@ -46,102 +41,110 @@ def tela_consulta_os():
             return r.json().get("transitions", [])
         return []
 
-    def atualizar_os(issue_key, campos):
-        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
+    def aplicar_edicao(issue_key, campos, status_id=None):
         payload = {"fields": campos}
-        return requests.put(url, headers=HEADERS, json=payload).status_code == 204
+        url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
+        r1 = requests.put(url, headers=HEADERS, json=payload)
 
-    issues = buscar_issues()
+        if status_id:
+            url_transition = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
+            payload_transition = {"transition": {"id": status_id}}
+            requests.post(url_transition, headers=HEADERS, json=payload_transition)
 
-    if not issues:
-        st.warning("Nenhuma OS encontrada.")
-        return
+        return r1.status_code == 204
 
-    st.success(f"{len(issues)} OS encontradas.")
+    oss = buscar_oss()
+    termo_busca = st.text_input("🔍 Buscar OS", placeholder="Resumo, descrição, placa, telefone, marca, modelo, ano")
 
-    busca = st.text_input("🔎 Buscar por qualquer campo (placa, resumo, marca...)")
+    for os_item in oss:
+        campos = os_item["fields"]
+        key = os_item["key"]
+        resumo = campos.get("summary", "")
+        desc = campos.get("description", "")
+        status = campos.get("status", {}).get("name", "")
+        placa = campos.get("customfield_10134", "")
+        telefone = campos.get("customfield_10041", "")
+        marca = campos.get("customfield_10140", {}).get("value", "")
+        modelo = campos.get("customfield_10136", "")
+        ano = campos.get("customfield_10138", "")
 
-    linhas = []
-    for i, issue in enumerate(issues):
-        key = issue["key"]
-        f = issue["fields"]
-        resumo = f.get("summary", "")
-        descricao = f.get("description", "")
-        placa = f.get("customfield_10134", "")
-        marca = f.get("customfield_10140", {}).get("value", "")
-        modelo = f.get("customfield_10136", "")
-        ano = f.get("customfield_10138", "")
-        telefone = f.get("customfield_10041", "")
-        status = f.get("status", {}).get("name", "")
+        texto_completo = f"{resumo} {desc} {placa} {telefone} {marca} {modelo} {ano}".lower()
+        if termo_busca.lower() not in texto_completo:
+            continue
 
-        if busca:
-            termo = busca.lower()
-            if not any(termo in str(v).lower() for v in [resumo, descricao, placa, telefone, marca, modelo, ano]):
-                continue
+        with st.expander(f"🔧 {key} - {resumo} [{status}]"):
+            st.markdown(f"**Descrição:** {desc}")
+            st.markdown(f"**Placa:** {placa}  ")
+            st.markdown(f"**Telefone:** {telefone}  ")
+            st.markdown(f"**Marca:** {marca}  ")
+            st.markdown(f"**Modelo:** {modelo}  ")
+            st.markdown(f"**Ano:** {ano}  ")
 
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            with st.expander(f"🔧 {key} - {resumo} [{status}]"):
-                st.markdown(f"**Placa:** {placa}  ")
-                st.markdown(f"**Telefone:** {telefone}")
-                st.markdown(f"**Marca:** {marca}")
-                st.markdown(f"**Modelo:** {modelo}")
-                st.markdown(f"**Ano:** {ano}")
+            subtarefas = buscar_subtarefas(key)
+            if subtarefas:
                 st.markdown("---")
-                st.markdown("### 🧾 Itens/Subtarefas")
-                subtarefas = buscar_subtarefas(key)
-                if not subtarefas:
-                    st.warning("Nenhuma subtarefa encontrada.")
-                else:
-                    for item in subtarefas:
-                        st.markdown(f"**{item['key']} - {item['fields']['summary']}**")
-                        desc = item["fields"].get("description", "")
-                        st.markdown(f"> {desc}")
-                        st.markdown("---")
+                st.subheader("🧾 Subtarefas")
+                for sub in subtarefas:
+                    st.markdown(f"**{sub['key']} - {sub['fields']['summary']}**")
+                    st.markdown(f"> {sub['fields'].get('description', '')}")
+            else:
+                st.markdown("_Nenhuma subtarefa encontrada._")
 
-        with col2:
-            if st.button("✏️ Editar", key=f"edit_{i}"):
-                st.session_state["os_editando"] = issue
-                st.rerun()
+            if st.button(f"✏️ Editar {key}", key=f"editar_{key}"):
+                st.session_state["editar_os"] = {
+                    "key": key,
+                    "resumo": resumo,
+                    "desc": desc,
+                    "placa": placa,
+                    "telefone": telefone,
+                    "marca": marca,
+                    "modelo": modelo,
+                    "ano": ano,
+                    "status": status
+                }
 
-    if "os_editando" in st.session_state:
-        issue = st.session_state["os_editando"]
-        key = issue["key"]
-        f = issue["fields"]
-
+    if "editar_os" in st.session_state:
+        os = st.session_state["editar_os"]
         st.markdown("---")
-        st.header(f"🛠️ Editar OS {key}")
+        st.subheader(f"📝 Editar OS {os['key']}")
+        with st.form("form_edicao"):
+            novo_resumo = st.text_input("Resumo", os["resumo"])
+            nova_desc = st.text_area("Descrição", os["desc"])
+            nova_placa = st.text_input("Placa", os["placa"])
+            novo_tel = st.text_input("Telefone", os["telefone"])
+            nova_marca = st.text_input("Marca", os["marca"])
+            novo_modelo = st.text_input("Modelo", os["modelo"])
+            novo_ano = st.text_input("Ano", os["ano"])
 
-        resumo = st.text_input("Resumo", value=f.get("summary", ""))
-        descricao = st.text_area("Descrição", value=f.get("description", ""))
-        placa = st.text_input("Placa", value=f.get("customfield_10134", ""))
-        telefone = st.text_input("Telefone", value=f.get("customfield_10041", ""))
-        marca = st.text_input("Marca", value=f.get("customfield_10140", {}).get("value", ""))
-        modelo = st.text_input("Modelo", value=f.get("customfield_10136", ""))
-        ano = st.text_input("Ano", value=f.get("customfield_10138", ""))
+            transicoes = buscar_transicoes(os["key"])
+            opcoes_status = {t["name"]: t["id"] for t in transicoes}
+            novo_status_nome = st.selectbox("Status", list(opcoes_status.keys()), index=list(opcoes_status.keys()).index(os["status"]) if os["status"] in opcoes_status else 0)
+            novo_status_id = opcoes_status.get(novo_status_nome)
 
-        transicoes = buscar_transicoes(key)
-        opcoes_status = {t["name"]: t["id"] for t in transicoes}
-        status_atual = f.get("status", {}).get("name", "")
-        novo_status = st.selectbox("Status", options=list(opcoes_status.keys()), index=list(opcoes_status).index(status_atual) if status_atual in opcoes_status else 0)
+            col1, col2 = st.columns(2)
+            with col1:
+                salvar = st.form_submit_button("💾 Salvar alterações")
+            with col2:
+                cancelar = st.form_submit_button("❌ Cancelar")
 
-        if st.button("💾 Salvar alterações"):
-            campos = {
-                "summary": resumo,
-                "description": descricao,
-                "customfield_10134": placa,
-                "customfield_10041": telefone,
-                "customfield_10140": {"value": marca},
-                "customfield_10136": modelo,
-                "customfield_10138": ano,
+        if salvar:
+            campos_atualizados = {
+                "summary": novo_resumo,
+                "description": nova_desc,
+                "customfield_10134": nova_placa,
+                "customfield_10041": novo_tel,
+                "customfield_10140": {"value": nova_marca},
+                "customfield_10136": novo_modelo,
+                "customfield_10138": novo_ano
             }
-            ok = atualizar_os(key, campos)
-            status_ok = aplicar_transicao(key, opcoes_status[novo_status]) if novo_status != status_atual else True
-
-            if ok and status_ok:
-                st.success("OS atualizada com sucesso.")
-                del st.session_state["os_editando"]
+            sucesso = aplicar_edicao(os["key"], campos_atualizados, status_id=novo_status_id)
+            if sucesso:
+                st.success("OS atualizada com sucesso!")
+                del st.session_state["editar_os"]
                 st.rerun()
             else:
-                st.error("Erro ao atualizar OS. Verifique os campos e tente novamente.")
+                st.error("Erro ao atualizar OS.")
 
+        if cancelar:
+            del st.session_state["editar_os"]
+            st.rerun()
