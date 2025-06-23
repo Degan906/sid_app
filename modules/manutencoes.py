@@ -217,7 +217,7 @@ def tela_consulta_os():
             st.session_state.os_key = key
             st.session_state.itens = []  # Limpa os itens anteriores
             st.session_state.confirmado = False
-            st.experimental_rerun()  # Força a atualização da tela
+            st.rerun()  # Força a atualização da tela
 
 # === LÓGICA DE NAVEGAÇÃO ===
 if "tela_atual" not in st.session_state:
