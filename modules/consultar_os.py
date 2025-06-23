@@ -3,7 +3,7 @@ import requests
 import base64
 
 # === CONFIGURAÇÃO JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net" 
+JIRA_URL = "https://hcdconsultoria.atlassian.net"    
 EMAIL = "degan906@gmail.com"
 TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 HEADERS = {
@@ -87,7 +87,14 @@ def tela_consulta_os():
         status = campos.get("status", {}).get("name", "")
         placa = campos.get("customfield_10134", "")
         telefone = campos.get("customfield_10041", "")
-        marca = campos.get("customfield_10140", {}).get("value", "")
+
+        # Correção para o campo customfield_10140
+        custom_field_10140 = campos.get("customfield_10140")
+        if isinstance(custom_field_10140, dict):
+            marca = custom_field_10140.get("value", "")
+        else:
+            marca = str(custom_field_10140) if custom_field_10140 else ""
+
         modelo = campos.get("customfield_10136", "")
         ano = campos.get("customfield_10138", "")
 
