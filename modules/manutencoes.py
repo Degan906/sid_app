@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import base64
@@ -146,23 +147,12 @@ def tela_manutencoes():
                     st.session_state.itens.pop(idx)
                     st.rerun()
 
-            # RESUMO ESTILO CARDS
-            pecas_total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == "Peça")
-            servicos_total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens if i['tipo'] == "Serviço")
-            total_geral = pecas_total + servicos_total
-
-            st.markdown("---")
-            st.markdown("### 📋 Resumo do Orçamento")
-            r1, r2, r3 = st.columns(3)
-            r1.metric("🛠️ Total de Peças", f"R$ {pecas_total:.2f}")
-            r2.metric("👷️ Total M.O. (Serviços)", f"R$ {servicos_total:.2f}")
-            r3.metric("💰 Total do Orçamento", f"R$ {total_geral:.2f}")
-
             if st.button("✅ Confirmar Itens e Criar Subtarefas"):
                 for item in st.session_state.itens:
                     criar_subtarefa(os_key, item)
-                atualizar_total_os(os_key, total_geral)
-                st.success(f"Subtarefas criadas com sucesso. Total da OS: R$ {total_geral:.2f}")
+                total = sum(i['quantidade'] * i['valor'] for i in st.session_state.itens)
+                atualizar_total_os(os_key, total)
+                st.success(f"Subtarefas criadas com sucesso. Total da OS: R$ {total:.2f}")
                 st.session_state.confirmado = True
 
         if st.session_state.get("confirmado"):
@@ -181,3 +171,46 @@ def tela_manutencoes():
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
+def tela_consulta_os():
+    st.title("🔍 Consultar Ordens de Serviço")
+
+    jql = 'project = MC AND issuetype = "OS" ORDER BY created DESC'
+    url = f"{JIRA_URL}/rest/api/2/search"
+    params = {
+        "jql": jql,
+        "maxResults": 100,
+        "fields": "summary,status"
+    }
+    r = requests.get(url, headers=JIRA_HEADERS, params=params)
+
+    if r.status_code != 200:
+        st.error("Erro ao buscar OS")
+        return
+
+    issues = r.json().get("issues", [])
+    if not issues:
+        st.info("Nenhuma OS encontrada.")
+        return
+
+    st.markdown("### 🗂 Lista de OS")
+    for issue in issues:
+        key = issue["key"]
+        summary = issue["fields"].get("summary", "-")
+        status = issue["fields"].get("status", {}).get("name", "-")
+
+        cliente_match = re.search(r"OS - (.*?) \(", summary)
+        cliente = cliente_match.group(1) if cliente_match else "-"
+        placa_match = re.search(r"\((.*?)\)", summary)
+        placa = placa_match.group(1) if placa_match else "-"
+
+        cols = st.columns([2, 4, 2, 2])
+        cols[0].markdown(f"**{key}**")
+        cols[1].markdown(f"{cliente}")
+        cols[2].markdown(f"{placa}")
+        cols[3].markdown(f"📋 *{status}*")
+
+        if cols[0].button("Abrir", key=f"abrir_{key}"):
+            st.session_state.os_key = key
+            st.session_state.itens = []  # Opcional: reprocessar depois
+            st.session_state.confirmado = False
+            st.experimental_rerun()
