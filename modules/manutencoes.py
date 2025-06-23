@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -7,7 +6,7 @@ import re
 import datetime
 
 # === CONFIG JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_URL = "https://hcdconsultoria.atlassian.net"   
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 JIRA_HEADERS = {
@@ -78,11 +77,12 @@ def atualizar_total_os(issue_key, total):
     r = requests.put(url, headers=JIRA_HEADERS, json=payload)
     return r.status_code == 204
 
+# === TELAS ===
 def tela_manutencoes():
     st.title("\U0001F698 SID - Sistema de Manutenção de Veículos")
     st.header("\U0001F6E0️ Abertura de Ordem de Serviço (OS)")
 
-    if "os_key" not in st.session_state:
+    if "os_key" not in st.session_state or not st.session_state.os_key:
         st.subheader("\U0001F464 Selecionar Cliente")
         clientes = buscar_clientes()
         nomes = [f"{c['fields'].get('summary')} - {c['fields'].get('customfield_10041')}" for c in clientes]
@@ -133,6 +133,7 @@ def tela_manutencoes():
 
         if st.button("Adicionar Item"):
             st.session_state.itens.append({"tipo": tipo, "descricao": descricao, "quantidade": quantidade, "valor": valor})
+            st.rerun()
 
         if st.session_state.itens:
             st.markdown("#### Itens pendentes")
@@ -171,6 +172,7 @@ def tela_manutencoes():
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
+
 def tela_consulta_os():
     st.title("🔍 Consultar Ordens de Serviço")
 
@@ -210,7 +212,17 @@ def tela_consulta_os():
         cols[3].markdown(f"📋 *{status}*")
 
         if cols[0].button("Abrir", key=f"abrir_{key}"):
+            st.session_state.tela_atual = "manutencoes"  # Altera o estado para abrir a tela de manutenções
             st.session_state.os_key = key
             st.session_state.itens = []  # Opcional: reprocessar depois
             st.session_state.confirmado = False
             st.rerun()
+
+# === LÓGICA DE NAVEGAÇÃO ===
+if "tela_atual" not in st.session_state:
+    st.session_state.tela_atual = "consulta_os"  # Tela inicial
+
+if st.session_state.tela_atual == "consulta_os":
+    tela_consulta_os()
+elif st.session_state.tela_atual == "manutencoes":
+    tela_manutencoes()
