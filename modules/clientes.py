@@ -34,13 +34,14 @@ def buscar_cep(cep):
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if "erro" in data:
+            if data.get("erro"):
                 return None
+
             return {
-                'logradouro': data.get('logradouro'),
-                'bairro': data.get('bairro'),
-                'localidade': data.get('localidade'),
-                'uf': data.get('uf')
+                'logradouro': data.get('logradouro', '').strip() or '(Sem logradouro)',
+                'bairro': data.get('bairro', '').strip() or '(Sem bairro)',
+                'localidade': data.get('localidade', '').strip() or '(Sem cidade)',
+                'uf': data.get('uf', '').strip() or '(Sem UF)'
             }
     except Exception:
         return None
