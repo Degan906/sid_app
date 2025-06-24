@@ -1,8 +1,8 @@
 import streamlit as st
 import requests
+import base64
 import unicodedata
 import re
-import base64
 
 # === CONFIGURAÇÕES DO JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
@@ -13,6 +13,24 @@ JIRA_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json"
 }
+
+# === FUNÇÕES AUXILIARES ===
+def corrige_abnt(texto):
+    texto = texto.strip().lower()
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    texto = re.sub(r'[^a-zA-Z0-9\s]', '', texto)
+    texto = ' '.join(word.capitalize() for word in texto.split())
+    return texto
+
+def buscar_cep(cep):
+    try:
+        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        return None
+    return None
 
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
     payload = {
@@ -35,7 +53,6 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
     if response.status_code == 201:
         return response.json().get("key")
     else:
-        st.error(f"Erro ao criar cliente: {response.status_code} - {response.text}")
         return None
 
 def anexar_foto(issue_key, imagem):
@@ -48,62 +65,27 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
-def buscar_cep(cep):
-    cep = re.sub(r'\D', '', cep)
-    if len(cep) == 8:
-        try:
-            resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/", timeout=5)
-            if resp.status_code == 200 and "erro" not in resp.text:
-                return resp.json()
-        except Exception:
-            return None
-    return None
-
-def cliente_duplicado(cpf, email):
-    jql = f'project = MC AND issuetype = Clientes AND (customfield_10040 ~ "{cpf}" OR customfield_10042 ~ "{email}")'
-    url = f"{JIRA_URL}/rest/api/2/search"
-    params = {"jql": jql, "maxResults": 1}
-    try:
-        resp = requests.get(url, headers=JIRA_HEADERS, params=params, timeout=10)
-        return resp.status_code == 200 and resp.json().get("issues")
-    except:
-        return False
-
+# === TELA DE CADASTRO DE CLIENTE ===
 def tela_clientes():
-    st.header("👤 Cadastro de Clientes")
-
-    def validar_email(email):
-        return re.match(r"[^@]+@[^@]+\.[^@]+", email)
-
-    def mascarar_documento(valor):
-        valor = re.sub(r'\D', '', valor)
-        if len(valor) <= 11:
-            return f"{valor[:3]}.{valor[3:6]}.{valor[6:9]}-{valor[9:]}"
-        else:
-            return f"{valor[:2]}.{valor[2:5]}.{valor[5:8]}/{valor[8:12]}-{valor[12:]}"
+    st.header("👤 Cadastro de Cliente")
 
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
 
         with col1:
-            nome = st.text_input("Nome do Cliente *").strip()
-            documento = st.text_input("CPF ou CNPJ *")
-            telefone = st.text_input("Telefone *", placeholder="(00) 00000-0000")
-            email = st.text_input("E-mail *")
+            nome = st.text_input("Nome *")
+            doc = st.text_input("CPF/CNPJ *")
             empresa = st.text_input("Empresa")
+            telefone = st.text_input("Telefone *")
+            email = st.text_input("E-mail *")
 
         with col2:
-            cep = st.text_input("CEP *")
-            numero = st.text_input("Número")
+            cep = st.text_input("CEP *", key="cep_input")
+            cep_limpo = re.sub(r'\D', '', cep)
+            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
+            numero = st.text_input("Número *")
             complemento = st.text_input("Complemento")
-            imagem = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
-
-        submit = st.form_submit_button("✅ Confirmar dados")
-
-    # === Após submit ===
-    if submit:
-        cep_limpo = re.sub(r'\D', '', cep)
-        endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
+            imagem = st.file_uploader("Foto do cliente (opcional)", type=["png", "jpg", "jpeg"])
 
         if endereco:
             st.markdown("#### 📍 Endereço detectado:")
@@ -117,52 +99,35 @@ def tela_clientes():
         elif len(cep_limpo) == 8:
             st.error("❌ CEP inválido ou não encontrado.")
 
-        # Validação
-        erros = []
-        if not nome:
-            erros.append("Nome é obrigatório.")
-        if not documento:
-            erros.append("CPF ou CNPJ é obrigatório.")
-        if not telefone:
-            erros.append("Telefone é obrigatório.")
-        if not email or not validar_email(email):
-            erros.append("E-mail inválido.")
-        if not cep or not endereco:
-            erros.append("CEP inválido ou não encontrado.")
+        submitted = st.form_submit_button("🚀 Deseja realmente cadastrar este cliente?")
 
-        if erros:
-            for erro in erros:
-                st.error(f"❌ {erro}")
+    if submitted:
+        if not all([nome, doc, telefone, email, cep, numero]):
+            st.error("⚠️ Por favor, preencha todos os campos obrigatórios.")
             return
 
-        doc_formatado = mascarar_documento(documento)
-        endereco_formatado = (
-            f"{endereco['logradouro']} - {endereco['bairro']} - "
-            f"{endereco['localidade']}/{endereco['uf']}, nº {numero}"
-            if endereco else f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
-        )
+        nome = corrige_abnt(nome)
+        empresa = corrige_abnt(empresa)
 
-        st.markdown("### 📄 Resumo do cadastro")
-        st.markdown(f"**Nome:** {nome}")
-        st.markdown(f"**Documento:** {doc_formatado}")
-        st.markdown(f"**Telefone:** {telefone}")
-        st.markdown(f"**E-mail:** {email}")
-        st.markdown(f"**Empresa:** {empresa}")
-        st.markdown(f"**Endereço:** {endereco_formatado}")
-        if imagem:
-            st.image(imagem, width=160)
+        endereco_formatado = ""
+        if endereco:
+            endereco_formatado = f"{endereco.get('logradouro')} - {endereco.get('bairro')} - {endereco.get('localidade')}/{endereco.get('uf')}, nº {numero}"
+        else:
+            endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
 
-        if cliente_duplicado(documento, email):
-            st.warning("⚠️ Já existe um cliente com esse CPF ou E-mail no sistema!")
+        with st.spinner("Enviando para o Jira..."):
+            issue_key = criar_issue_jira(
+                nome, doc, empresa, telefone, email,
+                cep, numero, complemento, endereco_formatado
+            )
 
-        if st.button("🚀 Deseja realmente cadastrar este cliente?"):
-            with st.spinner("Enviando para o Jira..."):
-                issue_key = criar_issue_jira(
-                    nome, doc_formatado, empresa, telefone, email,
-                    cep, numero, complemento, endereco_formatado
-                )
-                if issue_key:
-                    if imagem:
-                        if not anexar_foto(issue_key, imagem):
-                            st.warning("⚠️ Cliente criado, mas não foi possível anexar a foto.")
-                    st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
+        if issue_key:
+            if imagem:
+                if not anexar_foto(issue_key, imagem):
+                    st.warning("⚠️ Cliente criado, mas não foi possível anexar a foto.")
+
+            st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
+            st.balloons()
+            st.experimental_rerun()
+        else:
+            st.error("❌ Erro ao cadastrar cliente. Verifique os dados ou tente novamente.")
