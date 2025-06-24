@@ -17,7 +17,7 @@ def menu_botao(titulo, icone, chave, mod_cadastro, mod_consulta=None):
         if st.button("🔎 Consulta", key=f"{chave}_cons"):
             st.session_state['pagina'] = mod_consulta or mod_cadastro
 
-# === BARRA DE MENUS COM BOTÕES DE TAMANHO PADRÃO ===
+# === BARRA DE MENU SUPERIOR COM BOTÕES PADRÃO ===
 col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.2, 6])
 with col1:
     menu_botao("Usuário", "👤", "usuario", "cad_usuario", "cons_usuario")
@@ -32,10 +32,10 @@ with col5:
 
 st.markdown("---")
 
-# === LOGO CENTRAL (imagem exemplo) ===
+# === LOGO CENTRAL (pode substituir pela sua imagem local) ===
 st.image("https://i.imgur.com/UvWZJ4z.png", width=300)
 
-# === CONTROLES RÁPIDOS (cards simples) ===
+# === CONTROLE VISUAL (PAINEL SIMBÓLICO) ===
 colA, colB, colC = st.columns(3)
 with colA:
     st.markdown("### Controle Diário")
@@ -48,8 +48,9 @@ with colC:
     st.markdown("### Controle Pagamentos")
     st.button("💰 PGTO Agendados hoje (0)")
 
-# === RODAPÉ ===
 st.markdown("---")
+
+# === RODAPÉ ===
 st.markdown(
     f"<div style='text-align:center; font-size:14px;'>"
     f"Usuário logado: <strong>ADMINISTRADOR TESTE</strong> - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}<br>"
@@ -57,26 +58,33 @@ st.markdown(
     f"</div>", unsafe_allow_html=True
 )
 
-# === CHAMADA DOS MÓDULOS CONFORME A ESCOLHA ===
+# === NAVEGAÇÃO ENTRE MÓDULOS ===
 if st.session_state['pagina'] == 'cad_usuario':
     st.warning("⚠️ Módulo de cadastro de usuário ainda em desenvolvimento.")
+
 elif st.session_state['pagina'] == 'cons_usuario':
     st.warning("⚠️ Módulo de consulta de usuário ainda em desenvolvimento.")
+
 elif st.session_state['pagina'] == 'cad_cliente':
     from modules import clientes
     clientes.tela_clientes()
+
 elif st.session_state['pagina'] == 'cons_cliente':
-    from modules import clientes
-    clientes.tela_busca_edicao_clientes()
+    from modules import consultar_clientes
+    consultar_clientes.tela_busca_edicao_clientes()
+
 elif st.session_state['pagina'] == 'cad_veiculo':
     from modules import veiculos
     veiculos.tela_veiculos()
+
 elif st.session_state['pagina'] == 'cons_veiculo':
     from modules import veiculos
     veiculos.tela_busca_edicao_veiculos()
+
 elif st.session_state['pagina'] == 'cad_os':
     from modules import manutencoes
     manutencoes.tela_manutencao()
+
 elif st.session_state['pagina'] == 'cons_os':
     from modules import consultar_os
     consultar_os.tela_consulta_os()
