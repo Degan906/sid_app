@@ -4,17 +4,18 @@ import base64
 import unicodedata
 import re
 
-# === CONFIG JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net"   
+# === CONFIGURAÇÃO DO JIRA ===
+JIRA_URL = "https://hcdconsultoria.atlassian.net" 
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
+
 JIRA_HEADERS = {
     "Authorization": f"Basic {base64.b64encode(f'{JIRA_EMAIL}:{JIRA_API_TOKEN}'.encode()).decode()}",
     "Accept": "application/json",
     "Content-Type": "application/json"
 }
 
-# === Funções auxiliares ===
+# === FUNÇÕES AUXILIARES ===
 def corrige_abnt(texto):
     texto = texto.strip().lower()
     texto = unicodedata.normalize('NFKD', texto)
@@ -25,12 +26,25 @@ def corrige_abnt(texto):
 
 def buscar_cep(cep):
     try:
-        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")   
+        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/") 
         if resp.status_code == 200:
             return resp.json()
-    except:
+    except Exception as e:
         return None
     return None
+
+def cpf_cnpj_existe(cpf_cnpj):
+    jql = f'project=MC AND customfield_10040="{cpf_cnpj}"'
+    url = f"{JIRA_URL}/rest/api/2/search"
+    payload = {
+        "jql": jql,
+        "maxResults": 1
+    }
+    response = requests.post(url, json=payload, headers=JIRA_HEADERS)
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("total", 0) > 0
+    return False
 
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
     payload = {
@@ -51,8 +65,10 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
     }
     response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
     if response.status_code == 201:
-        return response.json().get("key")
-    return None
+        return True, response.json().get("key")
+    else:
+        print("Erro ao criar issue:", response.text)
+        return False, None
 
 def anexar_foto(issue_key, imagem):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
@@ -64,15 +80,29 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
-# === Tela de cadastro de clientes ===
+# === TELA DE CONSULTA E CADASTRO DE CLIENTES ===
 def tela_clientes():
-    st.header("👤 Cadastro de Clientes")
+    st.header("👤 Cadastro e Consulta de Clientes")
 
+    # Estado da sessão
     if "form_confirmado" not in st.session_state:
         st.session_state.form_confirmado = False
     if "dados_cliente" not in st.session_state:
         st.session_state.dados_cliente = {}
 
+    # Campo de consulta rápida
+    with st.expander("🔍 Consultar Cliente por CPF/CNPJ"):
+        cpf_busca = st.text_input("Digite o CPF ou CNPJ:")
+        if st.button("Buscar no Jira"):
+            if cpf_busca:
+                if cpf_cnpj_existe(cpf_busca):
+                    st.info(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
+                else:
+                    st.warning(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
+            else:
+                st.warning("⚠️ Digite um CPF/CNPJ válido.")
+
+    # Formulário de cadastro
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
         with col1:
@@ -128,18 +158,28 @@ def tela_clientes():
             st.image(dados['imagem'], width=150)
 
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
-            with st.spinner("Enviando para o Jira..."):
-                key = criar_issue_jira(
-                    dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
-                    dados['email'], dados['cep'], dados['numero'], dados['complemento'],
-                    dados['endereco_formatado']
-                )
-                if key:
-                    if dados['imagem']:
-                        anexar_foto(key, dados['imagem'])
-                    st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
-                    st.session_state.form_confirmado = False
-                    st.session_state.dados_cliente = {}
-                    st.rerun()  # <-- Linha corrigida aqui
-                else:
-                    st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
+            with st.spinner("Verificando se o CPF/CNPJ já existe..."):
+
+                if cpf_cnpj_existe(dados['cpf']):
+                    st.warning("⚠️ Já existe um cliente cadastrado com este CPF/CNPJ!")
+                    return
+
+                with st.spinner("Enviando para o Jira..."):
+                    sucesso, key = criar_issue_jira(
+                        dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
+                        dados['email'], dados['cep'], dados['numero'], dados['complemento'],
+                        dados['endereco_formatado']
+                    )
+                    if sucesso:
+                        if dados['imagem']:
+                            anexar_foto(key, dados['imagem'])
+                        st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
+                        st.session_state.form_confirmado = False
+                        st.session_state.dados_cliente = {}
+                        st.rerun()
+                    else:
+                        st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
+
+# === EXECUÇÃO PRINCIPAL ===
+if __name__ == "__main__":
+    tela_clientes()
