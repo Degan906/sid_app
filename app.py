@@ -3,29 +3,33 @@ from datetime import datetime
 
 st.set_page_config(page_title="SID - Oficina", layout="wide")
 
-# === BARRA DE MENUS SUPERIOR COM ÍCONES ===
-col1, col2, col3, col4, col5 = st.columns([1,1,1,1,6])
+# === INICIALIZA CONTROLE DE PÁGINAS ===
+if 'pagina' not in st.session_state:
+    st.session_state['pagina'] = None
+
+# === BARRA SUPERIOR COM ÍCONES ===
+col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 6])
 with col1:
-    st.image("https://cdn-icons-png.flaticon.com/512/847/847969.png", width=40)
-    st.caption("Usuário")
+    if st.button("👤 Usuário"):
+        st.session_state['pagina'] = 'usuario'
 with col2:
-    st.image("https://cdn-icons-png.flaticon.com/512/471/471664.png", width=40)
-    st.caption("Cliente")
+    if st.button("👥 Cliente"):
+        st.session_state['pagina'] = 'clientes'
 with col3:
-    st.image("https://cdn-icons-png.flaticon.com/512/679/679720.png", width=40)
-    st.caption("Veículo")
+    if st.button("🚗 Veículo"):
+        st.session_state['pagina'] = 'veiculos'
 with col4:
-    st.image("https://cdn-icons-png.flaticon.com/512/1828/1828919.png", width=40)
-    st.caption("OS")
+    if st.button("🧾 OS"):
+        st.session_state['pagina'] = 'manutencoes'
 with col5:
     st.markdown("<h3 style='text-align:right;'>🔧 HCD-DEV&CONSULT</h3>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# === LOGO CENTRAL (usei uma imagem de exemplo, trocamos depois pela sua) ===
+# === EXIBE LOGO CENTRAL ===
 st.image("https://i.imgur.com/UvWZJ4z.png", width=300)
 
-# === PAINEL DE CONTROLE ===
+# === CONTROLES RÁPIDOS ===
 colA, colB, colC = st.columns(3)
 with colA:
     st.markdown("### Controle Diário")
@@ -38,10 +42,28 @@ with colC:
     st.markdown("### Controle Pagamentos")
     st.button("💰 PGTO Agendados hoje (0)")
 
-# === RODAPÉ ===
 st.markdown("---")
+
+# === RODAPÉ ===
 st.markdown(
     f"<div style='text-align:center; font-size:14px;'>"
     f"Usuário logado: <strong>ADMINISTRADOR TESTE</strong> - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}<br>"
     f"SID - Sistema Integrado de Dados: Versão 8.0"
-    f"</div>", unsafe_allow_html=True)
+    f"</div>", unsafe_allow_html=True
+)
+
+# === CHAMA OS MÓDULOS CONFORME A OPÇÃO ESCOLHIDA ===
+if st.session_state['pagina'] == 'clientes':
+    from modules import clientes
+    clientes.tela_clientes()
+
+elif st.session_state['pagina'] == 'veiculos':
+    from modules import veiculos
+    veiculos.tela_veiculos()
+
+elif st.session_state['pagina'] == 'manutencoes':
+    from modules import manutencoes
+    manutencoes.tela_manutencao()
+
+elif st.session_state['pagina'] == 'usuario':
+    st.warning("⚠️ Módulo de Usuários ainda em desenvolvimento.")
