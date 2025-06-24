@@ -26,45 +26,34 @@ def corrige_abnt(texto):
 
 def buscar_cep(cep):
     cep_limpo = re.sub(r'\D', '', cep)
-    
     if len(cep_limpo) != 8:
         return None
-
-    # Exemplo de CEP fixo para teste local
-    if cep_limpo == '06412200':
-        return {
-            'logradouro': 'Avenida das Nações Unidas',
-            'bairro': 'Alphaville Industrial',
-            'localidade': 'Barueri',
-            'uf': 'SP'
-        }
-
     try:
-        # Tenta usar a API real caso haja internet
-        url = f"https://viacep.com.br/ws/{cep_limpo}/json/" 
+        url = f"https://viacep.com.br/ws/{cep_limpo}/json/"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if "erro" not in data:
-                return data
-    except Exception as e:
-        st.warning("⚠️ Sem conexão com a API do ViaCEP. Usando dados simulados.")
-
-    # Fallback genérico se não conseguir acessar a API
-    return {
-        'logradouro': 'Rua Genérica',
-        'bairro': 'Centro',
-        'localidade': 'São Paulo',
-        'uf': 'SP'
-    }
+            if "erro" in data:
+                return None
+            return {
+                'logradouro': data.get('logradouro', 'Sem logradouro'),
+                'bairro': data.get('bairro', 'Sem bairro'),
+                'localidade': data.get('localidade', 'Sem cidade'),
+                'uf': data.get('uf', 'Sem UF')
+            }
+    except Exception:
+        st.warning("⚠️ Erro ao acessar o ViaCEP. Usando dados genéricos.")
+        return {
+            'logradouro': 'Rua Genérica',
+            'bairro': 'Centro',
+            'localidade': 'São Paulo',
+            'uf': 'SP'
+        }
 
 def cpf_cnpj_existe(cpf_cnpj):
     jql = f'project=MC AND customfield_10040="{cpf_cnpj}"'
     url = f"{JIRA_URL}/rest/api/2/search"
-    payload = {
-        "jql": jql,
-        "maxResults": 1
-    }
+    payload = {"jql": jql, "maxResults": 1}
     try:
         response = requests.post(url, json=payload, headers=JIRA_HEADERS, timeout=5)
         if response.status_code == 200:
@@ -128,7 +117,6 @@ def anexar_foto(issue_key, imagem):
 def tela_clientes():
     st.header("👤 Cadastro e Consulta de Clientes")
 
-    # Estado da sessão
     if "form_confirmado" not in st.session_state:
         st.session_state.form_confirmado = False
     if "dados_cliente" not in st.session_state:
@@ -156,8 +144,16 @@ def tela_clientes():
             empresa = st.text_input("Empresa:")
             telefone = st.text_input("Telefone:")
             email = st.text_input("E-mail:")
+
         with col2:
             cep = st.text_input("CEP:")
+            endereco = buscar_cep(cep) if cep and len(re.sub(r'\D', '', cep)) == 8 else None
+
+            if endereco:
+                st.success(f"📍 Endereço: {endereco['logradouro']}, {endereco['bairro']}, {endereco['localidade']}/{endereco['uf']}")
+            else:
+                st.info("ℹ️ Informe um CEP válido para exibir o endereço.")
+
             numero = st.text_input("Número:")
             complemento = st.text_input("Complemento:")
             imagem = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
@@ -169,7 +165,6 @@ def tela_clientes():
             st.warning("⚠️ Preencha todos os campos obrigatórios!")
             return
 
-        # Buscar CEP
         endereco = buscar_cep(cep)
         if endereco:
             endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
@@ -205,7 +200,6 @@ def tela_clientes():
 
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
             with st.spinner("Verificando se o CPF/CNPJ já existe..."):
-
                 if cpf_cnpj_existe(dados['cpf']):
                     st.warning("⚠️ Já existe um cliente cadastrado com este CPF/CNPJ!")
                     return
@@ -227,5 +221,5 @@ def tela_clientes():
                         st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
 
 # === EXECUÇÃO PRINCIPAL ===
-if __name__ == "__main__":
+if __name__ == "__main__" or True:
     tela_clientes()
