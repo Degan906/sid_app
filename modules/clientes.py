@@ -5,7 +5,7 @@ import unicodedata
 import re
 
 # === CONFIG JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_URL = "https://hcdconsultoria.atlassian.net"   
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 JIRA_HEADERS = {
@@ -25,7 +25,7 @@ def corrige_abnt(texto):
 
 def buscar_cep(cep):
     try:
-        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")   
         if resp.status_code == 200:
             return resp.json()
     except:
@@ -140,6 +140,6 @@ def tela_clientes():
                     st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
                     st.session_state.form_confirmado = False
                     st.session_state.dados_cliente = {}
-                    st.rerun()
+                    st.rerun()  # <-- Linha corrigida aqui
                 else:
                     st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
