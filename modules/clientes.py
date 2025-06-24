@@ -1,10 +1,58 @@
-def tela_clientes():
-    import streamlit as st
-    import re
-    import requests
-    import base64
+import streamlit as st
+import requests
+import unicodedata
+import re
+import base64
 
-    # === Funções auxiliares internas ===
+# === CONFIGURAÇÕES DO JIRA ===
+JIRA_URL = "https://hcdconsultoria.atlassian.net"
+JIRA_EMAIL = "degan906@gmail.com"
+JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
+JIRA_HEADERS = {
+    "Authorization": f"Basic {base64.b64encode(f'{JIRA_EMAIL}:{JIRA_API_TOKEN}'.encode()).decode()}",
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+}
+
+# === Funções auxiliares ===
+def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
+    payload = {
+        "fields": {
+            "project": {"key": "MC"},
+            "summary": nome,
+            "issuetype": {"name": "Clientes"},
+            "customfield_10038": nome,
+            "customfield_10040": cpf,
+            "customfield_10051": empresa,
+            "customfield_10041": telefone,
+            "customfield_10042": email,
+            "customfield_10133": cep,
+            "customfield_10039": "",
+            "customfield_10044": complemento,
+            "customfield_10139": numero,
+            "description": endereco_formatado
+        }
+    }
+    response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
+    if response.status_code == 201:
+        return response.json().get("key")
+    else:
+        st.error(f"Erro ao criar cliente: {response.status_code} - {response.text}")
+        return None
+
+def anexar_foto(issue_key, imagem):
+    url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
+    headers = {
+        "Authorization": JIRA_HEADERS["Authorization"],
+        "X-Atlassian-Token": "no-check"
+    }
+    files = {"file": (imagem.name, imagem.getvalue())}
+    response = requests.post(url, headers=headers, files=files)
+    return response.status_code == 200
+
+def tela_clientes():
+    st.header("👤 Cadastro de Clientes")
+
     def validar_email(email):
         return re.match(r"[^@]+@[^@]+\.[^@]+", email)
 
@@ -14,7 +62,7 @@ def tela_clientes():
             return f"{valor[:3]}.{valor[3:6]}.{valor[6:9]}-{valor[9:]}"
         else:
             return f"{valor[:2]}.{valor[2:5]}.{valor[5:8]}/{valor[8:12]}-{valor[12:]}"
-    
+
     def buscar_cep(cep):
         cep = re.sub(r'\D', '', cep)
         if len(cep) == 8:
@@ -29,9 +77,6 @@ def tela_clientes():
         params = {"jql": jql, "maxResults": 1}
         resp = requests.get(url, headers=JIRA_HEADERS, params=params)
         return resp.status_code == 200 and resp.json().get("issues")
-
-    # === Formulário dividido em colunas ===
-    st.header("👤 Cadastro de Clientes")
 
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
@@ -49,12 +94,16 @@ def tela_clientes():
             complemento = st.text_input("Complemento")
             imagem = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
 
-            endereco = buscar_cep(cep)
+            cep_limpo = re.sub(r'\D', '', cep)
+            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
+
             if endereco:
-                st.success(f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}")
-            else:
-                if len(re.sub(r'\D', '', cep)) == 8:
-                    st.warning("CEP inválido ou não encontrado.")
+                st.text_input("Logradouro", value=endereco.get("logradouro", ""), disabled=True)
+                st.text_input("Bairro", value=endereco.get("bairro", ""), disabled=True)
+                st.text_input("Cidade", value=endereco.get("localidade", ""), disabled=True)
+                st.text_input("UF", value=endereco.get("uf", ""), disabled=True)
+            elif cep_limpo:
+                st.warning("⚠️ CEP inválido ou não encontrado.")
 
         confirmar = st.form_submit_button("✅ Confirmar dados")
 
@@ -93,15 +142,14 @@ def tela_clientes():
         if imagem:
             st.image(imagem, width=160)
 
-        # Verifica duplicidade
         if cliente_duplicado(documento, email):
             st.warning("⚠️ Já existe um cliente com esse CPF ou E-mail no sistema!")
 
-        # Confirmação final
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
             with st.spinner("Enviando para o Jira..."):
                 issue_key = criar_issue_jira(
-                    nome, doc_formatado, empresa, telefone, email, cep, numero, complemento, endereco_formatado
+                    nome, doc_formatado, empresa, telefone, email,
+                    cep, numero, complemento, endereco_formatado
                 )
                 if issue_key:
                     if imagem:
