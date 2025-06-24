@@ -28,8 +28,7 @@ def buscar_cep(cep):
         resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")   
         if resp.status_code == 200:
             return resp.json()
-    except Exception as e:
-        st.error(f"❌ Erro ao buscar CEP: {e}")
+    except:
         return None
     return None
 
@@ -50,15 +49,10 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
             "description": endereco_formatado
         }
     }
-
-    url = f"{JIRA_URL}/rest/api/2/issue"
-    response = requests.post(url, json=payload, headers=JIRA_HEADERS)
-
+    response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
     if response.status_code == 201:
         return response.json().get("key")
-    else:
-        st.error(f"❌ Erro ao criar cliente no Jira: {response.status_code} - {response.text}")
-        return None
+    return None
 
 def anexar_foto(issue_key, imagem):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
@@ -66,13 +60,9 @@ def anexar_foto(issue_key, imagem):
         "Authorization": JIRA_HEADERS["Authorization"],
         "X-Atlassian-Token": "no-check"
     }
-    files = {"file": (imagem.name, imagem.getvalue(), imagem.type)}
+    files = {"file": (imagem.name, imagem.getvalue())}
     response = requests.post(url, headers=headers, files=files)
-    
-    if response.status_code != 200:
-        st.warning(f"⚠️ Erro ao anexar foto: {response.status_code} - {response.text}")
-        return False
-    return True
+    return response.status_code == 200
 
 # === Tela de cadastro de clientes ===
 def tela_clientes():
@@ -138,7 +128,7 @@ def tela_clientes():
             st.image(dados['imagem'], width=150)
 
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
-            with st.spinner("Enviando dados para o Jira..."):
+            with st.spinner("Enviando para o Jira..."):
                 key = criar_issue_jira(
                     dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
                     dados['email'], dados['cep'], dados['numero'], dados['complemento'],
@@ -147,9 +137,9 @@ def tela_clientes():
                 if key:
                     if dados['imagem']:
                         anexar_foto(key, dados['imagem'])
-                    st.success(f"✅ Cliente cadastrado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
+                    st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
                     st.session_state.form_confirmado = False
                     st.session_state.dados_cliente = {}
-                    st.rerun()
+                    st.rerun()  # <-- Linha corrigida aqui
                 else:
-                    st.error("❌ Ocorreu um erro ao cadastrar o cliente no Jira.")
+                    st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
