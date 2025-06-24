@@ -4,7 +4,7 @@ import base64
 import unicodedata
 import re
 
-# === CONFIGURAÇÕES DO JIRA ===
+# === CONFIG JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
@@ -14,7 +14,7 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === FUNÇÕES AUXILIARES ===
+# === Funções auxiliares ===
 def corrige_abnt(texto):
     texto = texto.strip().lower()
     texto = unicodedata.normalize('NFKD', texto)
@@ -52,8 +52,7 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
     response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
     if response.status_code == 201:
         return response.json().get("key")
-    else:
-        return None
+    return None
 
 def anexar_foto(issue_key, imagem):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
@@ -65,69 +64,82 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
-# === TELA DE CADASTRO DE CLIENTE ===
+# === Tela de cadastro de clientes ===
 def tela_clientes():
-    st.header("👤 Cadastro de Cliente")
+    st.header("👤 Cadastro de Clientes")
+
+    if "form_confirmado" not in st.session_state:
+        st.session_state.form_confirmado = False
+    if "dados_cliente" not in st.session_state:
+        st.session_state.dados_cliente = {}
 
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
-
         with col1:
-            nome = st.text_input("Nome *")
-            doc = st.text_input("CPF/CNPJ *")
-            empresa = st.text_input("Empresa")
-            telefone = st.text_input("Telefone *")
-            email = st.text_input("E-mail *")
-
+            nome = st.text_input("Nome do Cliente:")
+            cpf_cnpj = st.text_input("CPF/CNPJ:")
+            empresa = st.text_input("Empresa:")
+            telefone = st.text_input("Telefone:")
+            email = st.text_input("E-mail:")
         with col2:
-            cep = st.text_input("CEP *", key="cep_input")
-            cep_limpo = re.sub(r'\D', '', cep)
-            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
-            numero = st.text_input("Número *")
-            complemento = st.text_input("Complemento")
-            imagem = st.file_uploader("Foto do cliente (opcional)", type=["png", "jpg", "jpeg"])
+            cep = st.text_input("CEP:")
+            numero = st.text_input("Número:")
+            complemento = st.text_input("Complemento:")
+            imagem = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
 
-        if endereco:
-            st.markdown("#### 📍 Endereço detectado:")
-            st.markdown(f"""
-            <ul style='line-height: 1.6'>
-                <li><strong>Logradouro:</strong> {endereco.get('logradouro')}</li>
-                <li><strong>Bairro:</strong> {endereco.get('bairro')}</li>
-                <li><strong>Cidade:</strong> {endereco.get('localidade')} - {endereco.get('uf')}</li>
-            </ul>
-            """, unsafe_allow_html=True)
-        elif len(cep_limpo) == 8:
-            st.error("❌ CEP inválido ou não encontrado.")
+        confirmar = st.form_submit_button("✅ Confirmar Dados")
 
-        submitted = st.form_submit_button("🚀 Deseja realmente cadastrar este cliente?")
-
-    if submitted:
-        if not all([nome, doc, telefone, email, cep, numero]):
-            st.error("⚠️ Por favor, preencha todos os campos obrigatórios.")
+    if confirmar:
+        if not all([nome, cpf_cnpj, empresa, telefone, email, cep, numero]):
+            st.warning("⚠️ Preencha todos os campos obrigatórios!")
             return
 
-        nome = corrige_abnt(nome)
-        empresa = corrige_abnt(empresa)
-
-        endereco_formatado = ""
-        if endereco:
-            endereco_formatado = f"{endereco.get('logradouro')} - {endereco.get('bairro')} - {endereco.get('localidade')}/{endereco.get('uf')}, nº {numero}"
+        endereco = buscar_cep(re.sub(r'\D', '', cep))
+        if endereco and not endereco.get("erro"):
+            endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
         else:
             endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
 
-        with st.spinner("Enviando para o Jira..."):
-            issue_key = criar_issue_jira(
-                nome, doc, empresa, telefone, email,
-                cep, numero, complemento, endereco_formatado
-            )
+        st.session_state.form_confirmado = True
+        st.session_state.dados_cliente = {
+            "nome": corrige_abnt(nome),
+            "cpf": cpf_cnpj,
+            "empresa": corrige_abnt(empresa),
+            "telefone": telefone,
+            "email": email,
+            "cep": cep,
+            "numero": numero,
+            "complemento": complemento,
+            "endereco_formatado": endereco_formatado,
+            "imagem": imagem
+        }
 
-        if issue_key:
-            if imagem:
-                if not anexar_foto(issue_key, imagem):
-                    st.warning("⚠️ Cliente criado, mas não foi possível anexar a foto.")
+    if st.session_state.form_confirmado:
+        dados = st.session_state.dados_cliente
+        st.markdown("### 📋 Confirme os dados abaixo")
+        st.markdown(f"**Nome:** {dados['nome']}")
+        st.markdown(f"**CPF/CNPJ:** {dados['cpf']}")
+        st.markdown(f"**Empresa:** {dados['empresa']}")
+        st.markdown(f"**Telefone:** {dados['telefone']}")
+        st.markdown(f"**E-mail:** {dados['email']}")
+        st.markdown(f"**Endereço:** {dados['endereco_formatado']}")
 
-            st.success(f"🎉 Cliente criado com sucesso: [{issue_key}]({JIRA_URL}/browse/{issue_key})")
-            st.balloons()
-            st.experimental_rerun()
-        else:
-            st.error("❌ Erro ao cadastrar cliente. Verifique os dados ou tente novamente.")
+        if dados['imagem']:
+            st.image(dados['imagem'], width=150)
+
+        if st.button("🚀 Deseja realmente cadastrar este cliente?"):
+            with st.spinner("Enviando para o Jira..."):
+                key = criar_issue_jira(
+                    dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
+                    dados['email'], dados['cep'], dados['numero'], dados['complemento'],
+                    dados['endereco_formatado']
+                )
+                if key:
+                    if dados['imagem']:
+                        anexar_foto(key, dados['imagem'])
+                    st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
+                    st.session_state.form_confirmado = False
+                    st.session_state.dados_cliente = {}
+                    st.experimental_rerun()
+                else:
+                    st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
