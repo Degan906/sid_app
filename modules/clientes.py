@@ -140,6 +140,6 @@ def tela_clientes():
                     st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
                     st.session_state.form_confirmado = False
                     st.session_state.dados_cliente = {}
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
