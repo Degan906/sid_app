@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -123,9 +122,9 @@ def tela_clientes():
             if cpf_busca:
                 with st.spinner("Procurando no Jira..."):
                     if cpf_cnpj_existe(cpf_busca):
-                        st.success(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
+                        st.success(f"✅ CPF/CNPJ {cpf_busca} já está cadastrado no Jira.")
                     else:
-                        st.info(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
+                        st.info(f"❌ CPF/CNPJ {cpf_busca} ainda não foi cadastrado.")
             else:
                 st.warning("⚠️ Digite um CPF/CNPJ válido.")
 
