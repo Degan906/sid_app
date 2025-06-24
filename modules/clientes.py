@@ -78,6 +78,7 @@ def tela_clientes():
         resp = requests.get(url, headers=JIRA_HEADERS, params=params)
         return resp.status_code == 200 and resp.json().get("issues")
 
+    # === Formulário ===
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
 
@@ -89,25 +90,36 @@ def tela_clientes():
             empresa = st.text_input("Empresa")
 
         with col2:
-            cep = st.text_input("CEP *")
+            cep = st.text_input("CEP *", key="cep_input")
             numero = st.text_input("Número")
             complemento = st.text_input("Complemento")
             imagem = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
 
+            # Busca o endereço automaticamente
             cep_limpo = re.sub(r'\D', '', cep)
-            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
-
-            if endereco:
-                st.text_input("Logradouro", value=endereco.get("logradouro", ""), disabled=True)
-                st.text_input("Bairro", value=endereco.get("bairro", ""), disabled=True)
-                st.text_input("Cidade", value=endereco.get("localidade", ""), disabled=True)
-                st.text_input("UF", value=endereco.get("uf", ""), disabled=True)
-            elif cep_limpo:
-                st.warning("⚠️ CEP inválido ou não encontrado.")
+            if len(cep_limpo) == 8:
+                endereco = buscar_cep(cep_limpo)
+                st.session_state["endereco"] = endereco if endereco else None
+            else:
+                st.session_state["endereco"] = None
 
         confirmar = st.form_submit_button("✅ Confirmar dados")
 
+    # === Exibe endereço automaticamente fora do form ===
+    if "endereco" in st.session_state and st.session_state["endereco"]:
+        endereco = st.session_state["endereco"]
+        st.markdown("### 📍 Endereço encontrado")
+        colE1, colE2, colE3, colE4 = st.columns([3, 3, 3, 1])
+        colE1.text_input("Logradouro", value=endereco.get("logradouro", ""), disabled=True)
+        colE2.text_input("Bairro", value=endereco.get("bairro", ""), disabled=True)
+        colE3.text_input("Cidade", value=endereco.get("localidade", ""), disabled=True)
+        colE4.text_input("UF", value=endereco.get("uf", ""), disabled=True)
+    elif cep and len(re.sub(r'\D', '', cep)) == 8:
+        st.warning("⚠️ CEP inválido ou não encontrado.")
+
+    # === Processamento após confirmação ===
     if confirmar:
+        endereco = st.session_state.get("endereco", None)
         erros = []
         if not nome:
             erros.append("Nome é obrigatório.")
@@ -117,7 +129,7 @@ def tela_clientes():
             erros.append("Telefone é obrigatório.")
         if not email or not validar_email(email):
             erros.append("E-mail inválido.")
-        if not cep or not buscar_cep(cep):
+        if not cep or not endereco:
             erros.append("CEP inválido ou não encontrado.")
 
         if erros:
