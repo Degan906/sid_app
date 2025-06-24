@@ -25,12 +25,18 @@ def corrige_abnt(texto):
     return texto
 
 def buscar_cep(cep):
-    try:
-        resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/") 
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception as e:
+    cep_limpo = re.sub(r'\D', '', cep)
+    if len(cep_limpo) != 8:
         return None
+    try:
+        url = f"https://viacep.com.br/ws/{cep_limpo}/json/" 
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if "erro" not in data:
+                return data
+    except Exception as e:
+        st.error(f"Erro ao buscar CEP: {e}")
     return None
 
 def cpf_cnpj_existe(cpf_cnpj):
@@ -40,11 +46,17 @@ def cpf_cnpj_existe(cpf_cnpj):
         "jql": jql,
         "maxResults": 1
     }
-    response = requests.post(url, json=payload, headers=JIRA_HEADERS)
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("total", 0) > 0
-    return False
+    try:
+        response = requests.post(url, json=payload, headers=JIRA_HEADERS, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("total", 0) > 0
+        else:
+            st.warning("Erro na conexão com o Jira.")
+            return False
+    except Exception as e:
+        st.error(f"Erro ao verificar CPF/CNPJ: {e}")
+        return False
 
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
     payload = {
@@ -63,11 +75,20 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
             "description": endereco_formatado
         }
     }
-    response = requests.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, headers=JIRA_HEADERS)
-    if response.status_code == 201:
-        return True, response.json().get("key")
-    else:
-        print("Erro ao criar issue:", response.text)
+    try:
+        response = requests.post(
+            f"{JIRA_URL}/rest/api/2/issue",
+            json=payload,
+            headers=JIRA_HEADERS,
+            timeout=10
+        )
+        if response.status_code == 201:
+            return True, response.json().get("key")
+        else:
+            st.error(f"Erro ao criar issue: {response.text}")
+            return False, None
+    except Exception as e:
+        st.error(f"Erro ao conectar ao Jira: {e}")
         return False, None
 
 def anexar_foto(issue_key, imagem):
@@ -77,10 +98,14 @@ def anexar_foto(issue_key, imagem):
         "X-Atlassian-Token": "no-check"
     }
     files = {"file": (imagem.name, imagem.getvalue())}
-    response = requests.post(url, headers=headers, files=files)
-    return response.status_code == 200
+    try:
+        response = requests.post(url, headers=headers, files=files, timeout=10)
+        return response.status_code in [200, 201]
+    except Exception as e:
+        st.error(f"Erro ao anexar foto: {e}")
+        return False
 
-# === TELA DE CONSULTA E CADASTRO DE CLIENTES ===
+# === TELA DE CLIENTES ===
 def tela_clientes():
     st.header("👤 Cadastro e Consulta de Clientes")
 
@@ -95,10 +120,11 @@ def tela_clientes():
         cpf_busca = st.text_input("Digite o CPF ou CNPJ:")
         if st.button("Buscar no Jira"):
             if cpf_busca:
-                if cpf_cnpj_existe(cpf_busca):
-                    st.info(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
-                else:
-                    st.warning(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
+                with st.spinner("Procurando no Jira..."):
+                    if cpf_cnpj_existe(cpf_busca):
+                        st.success(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
+                    else:
+                        st.info(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
             else:
                 st.warning("⚠️ Digite um CPF/CNPJ válido.")
 
@@ -124,8 +150,9 @@ def tela_clientes():
             st.warning("⚠️ Preencha todos os campos obrigatórios!")
             return
 
-        endereco = buscar_cep(re.sub(r'\D', '', cep))
-        if endereco and not endereco.get("erro"):
+        # Buscar CEP
+        endereco = buscar_cep(cep)
+        if endereco:
             endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
         else:
             endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
