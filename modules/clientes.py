@@ -14,7 +14,6 @@ JIRA_HEADERS = {
     "Content-Type": "application/json"
 }
 
-# === Funções auxiliares ===
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
     payload = {
         "fields": {
@@ -27,7 +26,6 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
             "customfield_10041": telefone,
             "customfield_10042": email,
             "customfield_10133": cep,
-            "customfield_10039": "",
             "customfield_10044": complemento,
             "customfield_10139": numero,
             "description": endereco_formatado
@@ -50,6 +48,27 @@ def anexar_foto(issue_key, imagem):
     response = requests.post(url, headers=headers, files=files)
     return response.status_code == 200
 
+def buscar_cep(cep):
+    cep = re.sub(r'\D', '', cep)
+    if len(cep) == 8:
+        try:
+            resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/", timeout=5)
+            if resp.status_code == 200 and "erro" not in resp.text:
+                return resp.json()
+        except Exception:
+            return None
+    return None
+
+def cliente_duplicado(cpf, email):
+    jql = f'project = MC AND issuetype = Clientes AND (customfield_10040 ~ "{cpf}" OR customfield_10042 ~ "{email}")'
+    url = f"{JIRA_URL}/rest/api/2/search"
+    params = {"jql": jql, "maxResults": 1}
+    try:
+        resp = requests.get(url, headers=JIRA_HEADERS, params=params, timeout=10)
+        return resp.status_code == 200 and resp.json().get("issues")
+    except:
+        return False
+
 def tela_clientes():
     st.header("👤 Cadastro de Clientes")
 
@@ -63,22 +82,6 @@ def tela_clientes():
         else:
             return f"{valor[:2]}.{valor[2:5]}.{valor[5:8]}/{valor[8:12]}-{valor[12:]}"
 
-    def buscar_cep(cep):
-        cep = re.sub(r'\D', '', cep)
-        if len(cep) == 8:
-            resp = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
-            if resp.status_code == 200 and "erro" not in resp.text:
-                return resp.json()
-        return None
-
-    def cliente_duplicado(cpf, email):
-        jql = f'project = MC AND issuetype = Clientes AND (customfield_10040 ~ "{cpf}" OR customfield_10042 ~ "{email}")'
-        url = f"{JIRA_URL}/rest/api/2/search"
-        params = {"jql": jql, "maxResults": 1}
-        resp = requests.get(url, headers=JIRA_HEADERS, params=params)
-        return resp.status_code == 200 and resp.json().get("issues")
-
-    # === Formulário ===
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
 
@@ -90,32 +93,31 @@ def tela_clientes():
             empresa = st.text_input("Empresa")
 
         with col2:
-            cep = st.text_input("CEP *", key="cep_input")
-            cep_limpo = re.sub(r'\D', '', cep)
-            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
-            st.session_state["endereco"] = endereco if endereco else None
-
-            if endereco:
-                st.markdown("#### 📍 Endereço detectado:")
-                st.markdown(f"""
-                <ul style='line-height: 1.6'>
-                    <li><strong>Logradouro:</strong> {endereco.get('logradouro')}</li>
-                    <li><strong>Bairro:</strong> {endereco.get('bairro')}</li>
-                    <li><strong>Cidade:</strong> {endereco.get('localidade')} - {endereco.get('uf')}</li>
-                </ul>
-                """, unsafe_allow_html=True)
-            elif len(cep_limpo) == 8:
-                st.error("❌ CEP inválido ou não encontrado.")
-
+            cep = st.text_input("CEP *")
             numero = st.text_input("Número")
             complemento = st.text_input("Complemento")
             imagem = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
 
-        confirmar = st.form_submit_button("✅ Confirmar dados")
+        submit = st.form_submit_button("✅ Confirmar dados")
 
-    # === Processamento após confirmação ===
-    if confirmar:
-        endereco = st.session_state.get("endereco", None)
+    # === Após submit ===
+    if submit:
+        cep_limpo = re.sub(r'\D', '', cep)
+        endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
+
+        if endereco:
+            st.markdown("#### 📍 Endereço detectado:")
+            st.markdown(f"""
+            <ul style='line-height: 1.6'>
+                <li><strong>Logradouro:</strong> {endereco.get('logradouro')}</li>
+                <li><strong>Bairro:</strong> {endereco.get('bairro')}</li>
+                <li><strong>Cidade:</strong> {endereco.get('localidade')} - {endereco.get('uf')}</li>
+            </ul>
+            """, unsafe_allow_html=True)
+        elif len(cep_limpo) == 8:
+            st.error("❌ CEP inválido ou não encontrado.")
+
+        # Validação
         erros = []
         if not nome:
             erros.append("Nome é obrigatório.")
