@@ -91,31 +91,27 @@ def tela_clientes():
 
         with col2:
             cep = st.text_input("CEP *", key="cep_input")
+            cep_limpo = re.sub(r'\D', '', cep)
+            endereco = buscar_cep(cep_limpo) if len(cep_limpo) == 8 else None
+            st.session_state["endereco"] = endereco if endereco else None
+
+            if endereco:
+                st.markdown("#### 📍 Endereço detectado:")
+                st.markdown(f"""
+                <ul style='line-height: 1.6'>
+                    <li><strong>Logradouro:</strong> {endereco.get('logradouro')}</li>
+                    <li><strong>Bairro:</strong> {endereco.get('bairro')}</li>
+                    <li><strong>Cidade:</strong> {endereco.get('localidade')} - {endereco.get('uf')}</li>
+                </ul>
+                """, unsafe_allow_html=True)
+            elif len(cep_limpo) == 8:
+                st.error("❌ CEP inválido ou não encontrado.")
+
             numero = st.text_input("Número")
             complemento = st.text_input("Complemento")
             imagem = st.file_uploader("Foto do cliente", type=["jpg", "png", "jpeg"])
 
-            # Busca o endereço automaticamente
-            cep_limpo = re.sub(r'\D', '', cep)
-            if len(cep_limpo) == 8:
-                endereco = buscar_cep(cep_limpo)
-                st.session_state["endereco"] = endereco if endereco else None
-            else:
-                st.session_state["endereco"] = None
-
         confirmar = st.form_submit_button("✅ Confirmar dados")
-
-    # === Exibe endereço automaticamente fora do form ===
-    if "endereco" in st.session_state and st.session_state["endereco"]:
-        endereco = st.session_state["endereco"]
-        st.markdown("### 📍 Endereço encontrado")
-        colE1, colE2, colE3, colE4 = st.columns([3, 3, 3, 1])
-        colE1.text_input("Logradouro", value=endereco.get("logradouro", ""), disabled=True)
-        colE2.text_input("Bairro", value=endereco.get("bairro", ""), disabled=True)
-        colE3.text_input("Cidade", value=endereco.get("localidade", ""), disabled=True)
-        colE4.text_input("UF", value=endereco.get("uf", ""), disabled=True)
-    elif cep and len(re.sub(r'\D', '', cep)) == 8:
-        st.warning("⚠️ CEP inválido ou não encontrado.")
 
     # === Processamento após confirmação ===
     if confirmar:
