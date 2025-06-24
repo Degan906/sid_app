@@ -28,6 +28,7 @@ def buscar_cep(cep):
     cep_limpo = re.sub(r'\D', '', cep)
     if len(cep_limpo) != 8:
         return None
+
     try:
         url = f"https://viacep.com.br/ws/{cep_limpo}/json/"
         response = requests.get(url, timeout=5)
@@ -36,19 +37,13 @@ def buscar_cep(cep):
             if "erro" in data:
                 return None
             return {
-                'logradouro': data.get('logradouro', 'Sem logradouro'),
-                'bairro': data.get('bairro', 'Sem bairro'),
-                'localidade': data.get('localidade', 'Sem cidade'),
-                'uf': data.get('uf', 'Sem UF')
+                'logradouro': data.get('logradouro'),
+                'bairro': data.get('bairro'),
+                'localidade': data.get('localidade'),
+                'uf': data.get('uf')
             }
     except Exception:
-        st.warning("⚠️ Erro ao acessar o ViaCEP. Usando dados genéricos.")
-        return {
-            'logradouro': 'Rua Genérica',
-            'bairro': 'Centro',
-            'localidade': 'São Paulo',
-            'uf': 'SP'
-        }
+        return None
 
 def cpf_cnpj_existe(cpf_cnpj):
     jql = f'project=MC AND customfield_10040="{cpf_cnpj}"'
@@ -122,7 +117,6 @@ def tela_clientes():
     if "dados_cliente" not in st.session_state:
         st.session_state.dados_cliente = {}
 
-    # Campo de consulta rápida
     with st.expander("🔍 Consultar Cliente por CPF/CNPJ"):
         cpf_busca = st.text_input("Digite o CPF ou CNPJ:")
         if st.button("Buscar no Jira"):
@@ -135,7 +129,6 @@ def tela_clientes():
             else:
                 st.warning("⚠️ Digite um CPF/CNPJ válido.")
 
-    # Formulário de cadastro
     with st.form("form_cliente"):
         col1, col2 = st.columns(2)
         with col1:
@@ -147,16 +140,15 @@ def tela_clientes():
 
         with col2:
             cep = st.text_input("CEP:")
-            endereco = buscar_cep(cep) if cep and len(re.sub(r'\D', '', cep)) == 8 else None
-
-            if endereco:
-                st.success(f"📍 Endereço: {endereco['logradouro']}, {endereco['bairro']}, {endereco['localidade']}/{endereco['uf']}")
-            else:
-                st.info("ℹ️ Informe um CEP válido para exibir o endereço.")
-
             numero = st.text_input("Número:")
             complemento = st.text_input("Complemento:")
             imagem = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
+
+            endereco = buscar_cep(cep) if cep and len(re.sub(r'\D', '', cep)) == 8 else None
+            if endereco:
+                st.success(f"📍 Endereço: {endereco['logradouro']}, {endereco['bairro']}, {endereco['localidade']}/{endereco['uf']}")
+            elif cep:
+                st.warning("⚠️ CEP não encontrado ou inválido.")
 
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
@@ -166,10 +158,11 @@ def tela_clientes():
             return
 
         endereco = buscar_cep(cep)
-        if endereco:
-            endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
-        else:
-            endereco_formatado = f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
+        if not endereco:
+            st.error("❌ CEP inválido ou não encontrado. Não é possível continuar.")
+            return
+
+        endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
 
         st.session_state.form_confirmado = True
         st.session_state.dados_cliente = {
