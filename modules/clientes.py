@@ -55,10 +55,17 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
     response = requests.post(url, json=payload, headers=JIRA_HEADERS)
 
     if response.status_code == 201:
-        return response.json().get("key")
+        json_response = response.json()
+        issue_key = json_response.get("key")
+        issue_summary = json_response.get("fields", {}).get("summary")
+        return issue_key, issue_summary
     else:
-        st.error(f"❌ Erro ao criar cliente no Jira: {response.status_code} - {response.text}")
-        return None
+        try:
+            error_details = response.json()
+        except:
+            error_details = response.text
+        st.error(f"❌ Erro ao criar cliente no Jira: {response.status_code} - {error_details}")
+        return None, None
 
 def anexar_foto(issue_key, imagem):
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
@@ -139,17 +146,24 @@ def tela_clientes():
 
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
             with st.spinner("Enviando dados para o Jira..."):
-                key = criar_issue_jira(
+                issue_key, issue_summary = criar_issue_jira(
                     dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
                     dados['email'], dados['cep'], dados['numero'], dados['complemento'],
                     dados['endereco_formatado']
                 )
-                if key:
+                if issue_key:
                     if dados['imagem']:
-                        anexar_foto(key, dados['imagem'])
-                    st.success(f"✅ Cliente cadastrado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
+                        anexar_foto(issue_key, dados['imagem'])
+                    
+                    # Mostra link com key e summary
+                    link_issue = f"[{issue_key}]({JIRA_URL}/browse/{issue_key})"
+                    st.success(f"✅ Cliente cadastrado com sucesso!\n\n- **Chave do cliente:** {link_issue}\n- **Nome:** {issue_summary}")
+                    
+                    # Limpa estado e recarrega a página
                     st.session_state.form_confirmado = False
                     st.session_state.dados_cliente = {}
+                    
+                    # Aguarda um breve momento antes de recarregar
                     st.rerun()
                 else:
                     st.error("❌ Ocorreu um erro ao cadastrar o cliente no Jira.")
