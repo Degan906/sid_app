@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import base64
@@ -106,27 +107,108 @@ def anexar_foto(issue_key, imagem):
         return False
 
 # === TELA DE CLIENTES ===
+# substitua sua função tela_clientes() por esta:
 def tela_clientes():
     st.header("👤 Cadastro e Consulta de Clientes")
 
-    # Estado da sessão
     if "form_confirmado" not in st.session_state:
         st.session_state.form_confirmado = False
     if "dados_cliente" not in st.session_state:
         st.session_state.dados_cliente = {}
 
-    # Campo de consulta rápida
+    # === CONSULTA POR CPF/CNPJ ===
     with st.expander("🔍 Consultar Cliente por CPF/CNPJ"):
         cpf_busca = st.text_input("Digite o CPF ou CNPJ:")
         if st.button("Buscar no Jira"):
-            if cpf_busca:
+            if cpf_busca.strip():
                 with st.spinner("Procurando no Jira..."):
-                    if cpf_cnpj_existe(cpf_busca):
-                        st.success(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
-                    else:
-                        st.info(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
+                    try:
+                        if cpf_cnpj_existe(cpf_busca):
+                            st.success(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
+                        else:
+                            st.info(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
+                    except Exception as e:
+                        st.error(f"Erro na conexão com o Jira: {e}")
             else:
                 st.warning("⚠️ Digite um CPF/CNPJ válido.")
+
+    # === FORMULÁRIO ===
+    with st.form("form_cliente"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome do Cliente *")
+            cpf_cnpj = st.text_input("CPF/CNPJ *")
+            empresa = st.text_input("Empresa")
+            telefone = st.text_input("Telefone *")
+            email = st.text_input("E-mail *")
+        with col2:
+            cep = st.text_input("CEP *")
+            numero = st.text_input("Número *")
+            complemento = st.text_input("Complemento")
+            imagem = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
+
+        confirmar = st.form_submit_button("✅ Confirmar Dados")
+
+    if confirmar:
+        obrigatorios = [nome, cpf_cnpj, telefone, email, cep, numero]
+        if any(not campo.strip() for campo in obrigatorios):
+            st.warning("⚠️ Preencha todos os campos obrigatórios (*)!")
+            return
+
+        endereco = buscar_cep(cep)
+        endereco_formatado = (
+            f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
+            if endereco else f"CEP: {cep}, Nº: {numero}, Compl: {complemento}"
+        )
+
+        st.session_state.form_confirmado = True
+        st.session_state.dados_cliente = {
+            "nome": corrige_abnt(nome),
+            "cpf": cpf_cnpj,
+            "empresa": corrige_abnt(empresa),
+            "telefone": telefone,
+            "email": email,
+            "cep": cep,
+            "numero": numero,
+            "complemento": complemento,
+            "endereco_formatado": endereco_formatado,
+            "imagem": imagem
+        }
+
+    if st.session_state.form_confirmado:
+        dados = st.session_state.dados_cliente
+        st.markdown("### 📋 Confirme os dados abaixo")
+        st.markdown(f"**Nome:** {dados['nome']}")
+        st.markdown(f"**CPF/CNPJ:** {dados['cpf']}")
+        st.markdown(f"**Empresa:** {dados['empresa'] or '—'}")
+        st.markdown(f"**Telefone:** {dados['telefone']}")
+        st.markdown(f"**E-mail:** {dados['email']}")
+        st.markdown(f"**Endereço:** {dados['endereco_formatado']}")
+        if dados['imagem']:
+            st.image(dados['imagem'], width=150)
+
+        if st.button("🚀 Deseja realmente cadastrar este cliente?"):
+            with st.spinner("Verificando existência do CPF/CNPJ..."):
+                if cpf_cnpj_existe(dados['cpf']):
+                    st.warning("⚠️ Já existe um cliente com este CPF/CNPJ.")
+                    return
+
+                sucesso, key = criar_issue_jira(
+                    dados['nome'], dados['cpf'], dados['empresa'], dados['telefone'],
+                    dados['email'], dados['cep'], dados['numero'], dados['complemento'],
+                    dados['endereco_formatado']
+                )
+                if sucesso:
+                    if dados['imagem']:
+                        anexar_foto(key, dados['imagem'])
+                    st.success(f"✅ Cliente criado com sucesso: [{key}]({JIRA_URL}/browse/{key})")
+
+                    # Reinicia apenas estado de formulário (sem rerun direto)
+                    st.session_state.form_confirmado = False
+                    st.session_state.dados_cliente = {}
+                else:
+                    st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
+
 
     # Formulário de cadastro
     with st.form("form_cliente"):
