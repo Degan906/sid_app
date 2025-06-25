@@ -3,6 +3,7 @@ import requests
 import base64
 import unicodedata
 import re
+import time
 
 # === CONFIGURAÇÃO DO JIRA ===
 JIRA_URL = "https://hcdconsultoria.atlassian.net"    
@@ -29,28 +30,36 @@ def buscar_cep(cep):
     if len(cep_limpo) != 8:
         return None
 
-    try:
-        url = f"https://viacep.com.br/ws/{cep_limpo}/json/"   
-        headers = {"User-Agent": "Mozilla/5.0"}  # Evita bloqueio por falta de User-Agent
-        response = requests.get(url, headers=headers, timeout=5)
+    url = f"https://viacep.com.br/ws/{cep_limpo}/json/"   
+    headers = {"User-Agent": "Mozilla/5.0"}  # Evita bloqueio por falta de User-Agent
+    
+    for tentativa in range(3):  # Tenta até 3 vezes
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
 
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("erro"):
-                st.warning("⚠️ CEP não encontrado.")
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("erro"):
+                    st.warning("⚠️ CEP não encontrado.")
+                    return None
+                return {
+                    'logradouro': data.get('logradouro', '').strip() or '(Sem logradouro)',
+                    'bairro': data.get('bairro', '').strip() or '(Sem bairro)',
+                    'localidade': data.get('localidade', '').strip() or '(Sem cidade)',
+                    'uf': data.get('uf', '').strip() or '(Sem UF)'
+                }
+            elif response.status_code == 502:
+                st.warning(f"🔁 Tentativa {tentativa + 1} falhou (502 Bad Gateway). Tentando novamente em 3 segundos...")
+                time.sleep(3)
+            else:
+                st.error(f"❌ Erro ao acessar ViaCEP: {response.status_code}")
                 return None
-            return {
-                'logradouro': data.get('logradouro', '').strip() or '(Sem logradouro)',
-                'bairro': data.get('bairro', '').strip() or '(Sem bairro)',
-                'localidade': data.get('localidade', '').strip() or '(Sem cidade)',
-                'uf': data.get('uf', '').strip() or '(Sem UF)'
-            }
-        else:
-            st.error(f"❌ Erro ao acessar ViaCEP: {response.status_code}")
-            return None
-    except Exception as e:
-        st.error(f"🚨 Erro na conexão com o ViaCEP: {e}")
-        return None
+        except requests.exceptions.RequestException as e:
+            st.warning(f"🔁 Erro na conexão (tentativa {tentativa + 1}): {e}. Tentando novamente...")
+            time.sleep(3)
+    
+    st.error("🚨 Não foi possível conectar ao ViaCEP após várias tentativas.")
+    return None
 
 def cpf_cnpj_existe(cpf_cnpj):
     jql = f'project=MC AND customfield_10040="{cpf_cnpj}"'
@@ -151,25 +160,39 @@ def tela_clientes():
             complemento = st.text_input("Complemento:")
             imagem = st.file_uploader("Foto do Cliente:", type=["png", "jpg", "jpeg"])
 
-            endereco = buscar_cep(cep) if cep and len(re.sub(r'\D', '', cep)) == 8 else None
-            if endereco:
-                st.success(f"📍 Endereço: {endereco['logradouro']}, {endereco['bairro']}, {endereco['localidade']}/{endereco['uf']}")
-            elif cep:
-                st.warning("⚠️ CEP não encontrado ou inválido.")
+        # Buscar CEP apenas se digitado
+        endereco = None
+        if cep and len(re.sub(r'\D', '', cep)) == 8:
+            with st.spinner("Buscando endereço..."):
+                endereco = buscar_cep(cep)
+                if endereco:
+                    st.success(f"📍 Endereço encontrado: {endereco['logradouro']}, {endereco['bairro']}, {endereco['localidade']}/{endereco['uf']}")
+
+        # Campos manuais aparecem somente se o CEP não trouxer dados
+        if not endereco:
+            st.markdown("### 📝 Preencha o endereço manualmente")
+            logradouro = st.text_input("Logradouro:", key="manual_logradouro")
+            bairro = st.text_input("Bairro:", key="manual_bairro")
+            cidade = st.text_input("Cidade:", key="manual_cidade")
+            uf = st.text_input("UF (ex: SP):", key="manual_uf")
+        else:
+            logradouro = endereco.get('logradouro')
+            bairro = endereco.get('bairro')
+            cidade = endereco.get('localidade')
+            uf = endereco.get('uf')
 
         confirmar = st.form_submit_button("✅ Confirmar Dados")
 
     if confirmar:
-        if not all([nome, cpf_cnpj, empresa, telefone, email, cep, numero]):
+        if not all([nome, cpf_cnpj, empresa, telefone, email, numero]):
             st.warning("⚠️ Preencha todos os campos obrigatórios!")
             return
 
-        endereco = buscar_cep(cep)
-        if not endereco:
-            st.error("❌ CEP inválido ou não encontrado. Não é possível continuar.")
+        if not logradouro or not bairro or not cidade or not uf:
+            st.warning("⚠️ Preencha todos os campos do endereço (logradouro, bairro, cidade e UF).")
             return
 
-        endereco_formatado = f"{endereco['logradouro']} - {endereco['bairro']} - {endereco['localidade']}/{endereco['uf']}, nº {numero}"
+        endereco_formatado = f"{logradouro}, {bairro}, {cidade}/{uf}, nº {numero}"
 
         st.session_state.form_confirmado = True
         st.session_state.dados_cliente = {
@@ -182,6 +205,10 @@ def tela_clientes():
             "numero": numero,
             "complemento": complemento,
             "endereco_formatado": endereco_formatado,
+            "logradouro": logradouro,
+            "bairro": bairro,
+            "cidade": cidade,
+            "uf": uf,
             "imagem": imagem
         }
 
