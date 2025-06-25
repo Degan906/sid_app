@@ -5,7 +5,7 @@ import unicodedata
 import re
 
 # === CONFIGURAÇÃO DO JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net" 
+JIRA_URL = "https://hcdconsultoria.atlassian.net"
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 
@@ -47,20 +47,25 @@ def buscar_cep(cep):
         return None
 
 def cpf_cnpj_existe(cpf_cnpj):
-    jql = f'project=MC AND customfield_10040="{cpf_cnpj}"'
+    jql = f'project = MC AND type = Clientes AND customfield_10040 = "{cpf_cnpj}"'
     url = f"{JIRA_URL}/rest/api/2/search"
     payload = {"jql": jql, "maxResults": 1}
     try:
         response = requests.post(url, json=payload, headers=JIRA_HEADERS, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            return data.get("total", 0) > 0
+            if data.get("total", 0) > 0:
+                issue = data["issues"][0]
+                key = issue["key"]
+                nome = issue["fields"].get("summary", "Sem nome")
+                return {"existe": True, "key": key, "nome": nome}
+            return {"existe": False}
         else:
             st.warning("Erro na conexão com o Jira.")
-            return False
+            return {"existe": False}
     except Exception as e:
         st.error(f"Erro ao verificar CPF/CNPJ: {e}")
-        return False
+        return {"existe": False}
 
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
     payload = {
@@ -123,8 +128,9 @@ def tela_clientes():
         if st.button("Buscar no Jira"):
             if cpf_busca:
                 with st.spinner("Procurando no Jira..."):
-                    if cpf_cnpj_existe(cpf_busca):
-                        st.success(f"✅ CPF/CNPJ `{cpf_busca}` já está cadastrado no Jira.")
+                    resultado = cpf_cnpj_existe(cpf_busca)
+                    if resultado["existe"]:
+                        st.success(f"✅ Já existe um cliente com este CPF/CNPJ: [{resultado['key']}]({JIRA_URL}/browse/{resultado['key']}) - {resultado['nome']}")
                     else:
                         st.info(f"❌ CPF/CNPJ `{cpf_busca}` ainda não foi cadastrado.")
             else:
@@ -194,8 +200,9 @@ def tela_clientes():
 
         if st.button("🚀 Deseja realmente cadastrar este cliente?"):
             with st.spinner("Verificando se o CPF/CNPJ já existe..."):
-                if cpf_cnpj_existe(dados['cpf']):
-                    st.warning("⚠️ Já existe um cliente cadastrado com este CPF/CNPJ!")
+                resultado = cpf_cnpj_existe(dados['cpf'])
+                if resultado["existe"]:
+                    st.warning(f"⚠️ Já existe um cliente com este CPF/CNPJ: [{resultado['key']}]({JIRA_URL}/browse/{resultado['key']}) - {resultado['nome']}")
                     return
 
                 with st.spinner("Enviando para o Jira..."):
