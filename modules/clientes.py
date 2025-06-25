@@ -5,7 +5,7 @@ import unicodedata
 import re
 
 # === CONFIGURAÇÃO DO JIRA ===
-JIRA_URL = "https://hcdconsultoria.atlassian.net" 
+JIRA_URL = "https://hcdconsultoria.atlassian.net"    
 JIRA_EMAIL = "degan906@gmail.com"
 JIRA_API_TOKEN = "glUQTNZG0V1uYnrRjp9yBB17"
 
@@ -30,20 +30,26 @@ def buscar_cep(cep):
         return None
 
     try:
-        url = f"https://viacep.com.br/ws/{cep_limpo}/json/"
-        response = requests.get(url, timeout=5)
+        url = f"https://viacep.com.br/ws/{cep_limpo}/json/"   
+        headers = {"User-Agent": "Mozilla/5.0"}  # Evita bloqueio por falta de User-Agent
+        response = requests.get(url, headers=headers, timeout=5)
+
         if response.status_code == 200:
             data = response.json()
             if data.get("erro"):
+                st.warning("⚠️ CEP não encontrado.")
                 return None
-
             return {
                 'logradouro': data.get('logradouro', '').strip() or '(Sem logradouro)',
                 'bairro': data.get('bairro', '').strip() or '(Sem bairro)',
                 'localidade': data.get('localidade', '').strip() or '(Sem cidade)',
                 'uf': data.get('uf', '').strip() or '(Sem UF)'
             }
-    except Exception:
+        else:
+            st.error(f"❌ Erro ao acessar ViaCEP: {response.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"🚨 Erro na conexão com o ViaCEP: {e}")
         return None
 
 def cpf_cnpj_existe(cpf_cnpj):
@@ -56,10 +62,10 @@ def cpf_cnpj_existe(cpf_cnpj):
             data = response.json()
             return data.get("total", 0) > 0
         else:
-            st.warning("Erro na conexão com o Jira.")
+            st.warning("⚠️ Erro na conexão com o Jira.")
             return False
     except Exception as e:
-        st.error(f"Erro ao verificar CPF/CNPJ: {e}")
+        st.error(f"🚨 Erro ao verificar CPF/CNPJ: {e}")
         return False
 
 def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemento, endereco_formatado):
@@ -89,10 +95,10 @@ def criar_issue_jira(nome, cpf, empresa, telefone, email, cep, numero, complemen
         if response.status_code == 201:
             return True, response.json().get("key")
         else:
-            st.error(f"Erro ao criar issue: {response.text}")
+            st.error(f"❌ Erro ao criar issue: {response.text}")
             return False, None
     except Exception as e:
-        st.error(f"Erro ao conectar ao Jira: {e}")
+        st.error(f"🚨 Erro ao conectar ao Jira: {e}")
         return False, None
 
 def anexar_foto(issue_key, imagem):
@@ -106,7 +112,7 @@ def anexar_foto(issue_key, imagem):
         response = requests.post(url, headers=headers, files=files, timeout=10)
         return response.status_code in [200, 201]
     except Exception as e:
-        st.error(f"Erro ao anexar foto: {e}")
+        st.error(f"🚨 Erro ao anexar foto: {e}")
         return False
 
 # === TELA DE CLIENTES ===
@@ -215,5 +221,5 @@ def tela_clientes():
                         st.error("❌ Erro ao cadastrar cliente. Verifique os dados e tente novamente.")
 
 # === EXECUÇÃO PRINCIPAL ===
-if __name__ == "__main__" or True:
+if __name__ == "__main__":
     tela_clientes()
